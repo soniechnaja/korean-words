@@ -87,8 +87,13 @@ const Storage = {
   },
 
   clearAll() {
+    // Стирает только слова — API-ключи, токен GitHub и тема остаются как есть.
     localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(STATE_KEY);
+    const state = this.getState();
+    state.backup = { lastBackupAt: null, changesSinceBackup: 0 };
+    state.studyLog = {};
+    state.dataUpdatedAt = Date.now();
+    this.saveState(state);
   },
 
   getState() {
@@ -100,10 +105,17 @@ const Storage = {
         studyLog: {},
         apiKey: '',
         backup: { lastBackupAt: null, changesSinceBackup: 0 },
+        dataUpdatedAt: 0,
+        github: { token: '', owner: '', repo: 'korean-words-data', path: 'data.json', sha: null, lastSyncAt: null },
         ...state,
       };
     } catch (e) {
-      return { theme: null, studyLog: {}, apiKey: '', backup: { lastBackupAt: null, changesSinceBackup: 0 } };
+      return {
+        theme: null, studyLog: {}, apiKey: '',
+        backup: { lastBackupAt: null, changesSinceBackup: 0 },
+        dataUpdatedAt: 0,
+        github: { token: '', owner: '', repo: 'korean-words-data', path: 'data.json', sha: null, lastSyncAt: null },
+      };
     }
   },
 
@@ -123,6 +135,7 @@ const Storage = {
     const state = this.getState();
     state.backup = state.backup || { lastBackupAt: null, changesSinceBackup: 0 };
     state.backup.changesSinceBackup = (state.backup.changesSinceBackup || 0) + n;
+    state.dataUpdatedAt = Date.now();
     this.saveState(state);
   },
 
@@ -134,6 +147,25 @@ const Storage = {
 
   exportJSON() {
     return JSON.stringify({ words: this.getWords(), state: this.getState(), exportedAt: new Date().toISOString() }, null, 2);
+  },
+
+  // То, что реально синхронизируется между устройствами через GitHub —
+  // без секретов (токен, API-ключ Claude, тема — всё это только для этого браузера).
+  getSyncPayload() {
+    const state = this.getState();
+    return {
+      words: this.getWords(),
+      studyLog: state.studyLog || {},
+      savedAt: state.dataUpdatedAt || 0,
+    };
+  },
+
+  applySyncPayload(payload) {
+    this.saveWords((payload.words || []).map(migrateWord));
+    const state = this.getState();
+    state.studyLog = payload.studyLog || {};
+    state.dataUpdatedAt = payload.savedAt || Date.now();
+    this.saveState(state);
   },
 
   importJSON(json, mode) {

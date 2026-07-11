@@ -240,6 +240,27 @@
       </div>
 
       <div class="panel">
+        <h3>Синхронизация между устройствами</h3>
+        <p class="hint-text">Слова хранятся в твоём приватном репозитории на GitHub и подтягиваются на любом устройстве, где ты откроешь этот сайт с теми же настройками. Как создать токен и репозиторий — см. инструкцию, которую я тебе прислала.</p>
+        <label class="field">
+          <span>Владелец репозитория (твой логин на GitHub)</span>
+          <input type="text" id="f-gh-owner" placeholder="username">
+        </label>
+        <label class="field">
+          <span>Название репозитория с данными</span>
+          <input type="text" id="f-gh-repo" placeholder="korean-words-data">
+        </label>
+        <label class="field">
+          <span>GitHub-токен (Personal Access Token)</span>
+          <input type="password" id="f-gh-token" placeholder="ghp_...">
+        </label>
+        <p class="hint-text" id="sync-status-text"></p>
+        <div class="data-actions">
+          <button class="btn btn-primary" id="btn-sync-save">Сохранить и синхронизировать</button>
+        </div>
+      </div>
+
+      <div class="panel">
         <h3>Проверка письма (уровень 4)</h3>
         <p class="hint-text">Чтобы Claude проверял твои предложения на уровне 4, вставь сюда свой API-ключ Anthropic. Ключ хранится только в этом браузере и отправляется напрямую в Anthropic при каждой проверке — я его не вижу.</p>
         <label class="field">

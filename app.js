@@ -10,9 +10,11 @@ let studySession = null; // { queue, index, correct, reviewed }
 let writingSession = null; // { category, words }
 let currentEditId = null;
 let toastTimer = null;
+let syncPushTimer = null;
 
 const CLAUDE_MODEL = 'claude-haiku-4-5';
 const BACKUP_REMINDER_THRESHOLD = 8;
+const SYNC_PUSH_DELAY_MS = 2500;
 
 // ---------- helpers ----------
 
@@ -222,6 +224,7 @@ function handleWordFormSubmit(e) {
   }
   closeWordModal();
   renderDictionary();
+  scheduleSyncPush();
 }
 
 function handleDeleteWord() {
@@ -231,6 +234,7 @@ function handleDeleteWord() {
   closeWordModal();
   renderDictionary();
   showToast('Слово удалено');
+  scheduleSyncPush();
 }
 
 // ---------- bulk add ----------
@@ -274,6 +278,7 @@ function handleBulkSubmit() {
   closeBulkModal();
   renderDictionary();
   showToast(`Добавлено слов: ${parsed.length}`);
+  scheduleSyncPush();
 }
 
 // ---------- study: mode switch (Слова / Письмо) ----------
@@ -496,6 +501,7 @@ function finishSession() {
   document.getElementById('summary-correct').textContent = studySession.correct;
   document.getElementById('summary-total').textContent = studySession.reviewed;
   refreshNavBadges();
+  scheduleSyncPush();
 }
 
 // ---------- study: writing (level 4, Claude-graded) ----------
@@ -620,6 +626,7 @@ async function handleWritingCheck() {
       <div>${esc(verdict.feedback)}</div>
       <div class="writing-result-corrected"><strong>Образец:</strong> ${esc(verdict.corrected)}</div>
     `;
+    scheduleSyncPush();
   } catch (err) {
     showToast(err.message || 'Не удалось проверить предложение');
   } finally {
@@ -713,6 +720,14 @@ function renderDataView() {
 
   document.getElementById('f-api-key').value = state.apiKey || '';
 
+  const gh = state.github || {};
+  document.getElementById('f-gh-owner').value = gh.owner || '';
+  document.getElementById('f-gh-repo').value = gh.repo || 'korean-words-data';
+  document.getElementById('f-gh-token').value = gh.token || '';
+  document.getElementById('sync-status-text').textContent = gh.lastSyncAt
+    ? `Последняя синхронизация: ${new Date(gh.lastSyncAt).toLocaleString('ru-RU')}`
+    : (ghConfigured(gh) ? 'Ещё не синхронизировалось.' : 'Синхронизация не настроена.');
+
   document.getElementById('last-backup-text').textContent = backup.lastBackupAt
     ? `Последний экспорт: ${new Date(backup.lastBackupAt).toLocaleString('ru-RU')} · изменений с тех пор: ${backup.changesSinceBackup}`
     : 'Резервная копия ещё не делалась.';
@@ -725,6 +740,146 @@ function renderDataView() {
       ? `Изменений с последнего экспорта: ${backup.changesSinceBackup}. Стоит сделать новый экспорт.`
       : `В базе уже ${words.length} ${pluralizeSlovo(words.length)}, а резервной копии ещё не было.`;
   }
+}
+
+// ---------- sync: GitHub private repo as the shared database ----------
+
+function b64EncodeUtf8(str) {
+  return btoa(unescape(encodeURIComponent(str)));
+}
+
+function b64DecodeUtf8(b64) {
+  return decodeURIComponent(escape(atob(b64.replace(/\n/g, ''))));
+}
+
+function ghConfigured(gh) {
+  return !!(gh && gh.token && gh.owner && gh.repo);
+}
+
+async function githubFetchFile(gh) {
+  const url = `https://api.github.com/repos/${gh.owner}/${gh.repo}/contents/${encodeURIComponent(gh.path)}`;
+  const resp = await fetch(url, {
+    headers: { Authorization: `Bearer ${gh.token}`, Accept: 'application/vnd.github+json' },
+  });
+  if (resp.status === 404) return null;
+  if (!resp.ok) throw new Error(`GitHub API ${resp.status} при чтении файла`);
+  const data = await resp.json();
+  return { sha: data.sha, content: JSON.parse(b64DecodeUtf8(data.content)) };
+}
+
+async function githubPutFile(gh, payload, sha) {
+  const url = `https://api.github.com/repos/${gh.owner}/${gh.repo}/contents/${encodeURIComponent(gh.path)}`;
+  const body = {
+    message: `sync: ${new Date().toISOString()}`,
+    content: b64EncodeUtf8(JSON.stringify(payload, null, 2)),
+  };
+  if (sha) body.sha = sha;
+  const resp = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${gh.token}`,
+      Accept: 'application/vnd.github+json',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    const errBody = await resp.text().catch(() => '');
+    throw new Error(`GitHub API ${resp.status} при сохранении: ${errBody.slice(0, 200)}`);
+  }
+  const data = await resp.json();
+  return data.content.sha;
+}
+
+async function pushToGithub(manual, knownMissing) {
+  const state = Storage.getState();
+  const gh = state.github;
+  if (!ghConfigured(gh)) {
+    if (manual) showToast('Сначала настрой синхронизацию в разделе «Данные».');
+    return;
+  }
+  try {
+    let sha = gh.sha;
+    if (!sha && !knownMissing) {
+      const remote = await githubFetchFile(gh);
+      sha = remote ? remote.sha : null;
+    }
+    const payload = Storage.getSyncPayload();
+    const newSha = await githubPutFile(gh, payload, sha);
+    const s = Storage.getState();
+    s.github.sha = newSha;
+    s.github.lastSyncAt = Date.now();
+    Storage.saveState(s);
+    if (manual) showToast('Синхронизировано ✓');
+    renderDataView();
+  } catch (err) {
+    console.warn('sync push failed', err);
+    if (manual) showToast(err.message || 'Не получилось синхронизировать');
+  }
+}
+
+// При открытии сайта — подтягиваем более свежую версию (по timestamp),
+// либо, если локальная новее (или в облаке пока пусто), заливаем её наверх.
+async function pullFromGithub(manual) {
+  const state = Storage.getState();
+  const gh = state.github;
+  if (!ghConfigured(gh)) {
+    if (manual) showToast('Сначала настрой синхронизацию в разделе «Данные».');
+    return;
+  }
+  try {
+    const remote = await githubFetchFile(gh);
+    if (!remote) {
+      await pushToGithub(manual, true);
+      return;
+    }
+    const localUpdatedAt = Storage.getState().dataUpdatedAt || 0;
+    const remoteSavedAt = remote.content.savedAt || 0;
+
+    if (remoteSavedAt > localUpdatedAt) {
+      Storage.applySyncPayload(remote.content);
+      const s = Storage.getState();
+      s.github.sha = remote.sha;
+      s.github.lastSyncAt = Date.now();
+      Storage.saveState(s);
+      renderDictionary();
+      updateStudyIntro();
+      renderStats();
+      if (manual) showToast('Загружены свежие данные с другого устройства');
+    } else if (remoteSavedAt < localUpdatedAt) {
+      await pushToGithub(manual);
+    } else {
+      const s = Storage.getState();
+      s.github.sha = remote.sha;
+      s.github.lastSyncAt = Date.now();
+      Storage.saveState(s);
+      if (manual) showToast('Уже синхронизировано');
+    }
+    renderDataView();
+  } catch (err) {
+    console.warn('sync pull failed', err);
+    if (manual) showToast(err.message || 'Не получилось синхронизировать');
+  }
+}
+
+function scheduleSyncPush() {
+  const gh = Storage.getState().github;
+  if (!ghConfigured(gh)) return;
+  clearTimeout(syncPushTimer);
+  syncPushTimer = setTimeout(() => pushToGithub(false), SYNC_PUSH_DELAY_MS);
+}
+
+function handleSyncSave() {
+  const state = Storage.getState();
+  state.github = {
+    ...state.github,
+    owner: document.getElementById('f-gh-owner').value.trim(),
+    repo: document.getElementById('f-gh-repo').value.trim() || 'korean-words-data',
+    token: document.getElementById('f-gh-token').value.trim(),
+    sha: null, // сменились настройки — узнаём sha заново при следующем запросе
+  };
+  Storage.saveState(state);
+  pullFromGithub(true);
 }
 
 function handleExport() {
@@ -756,6 +911,7 @@ function handleImportFile(e) {
       updateStudyIntro();
       renderDataView();
       showToast(`Готово: ${result.added} слов ${result.mode === 'replace' ? 'загружено' : 'добавлено'}`);
+      scheduleSyncPush();
     } catch (err) {
       showToast('Не получилось прочитать файл — проверь формат JSON');
     }
@@ -773,12 +929,17 @@ function handleSaveApiKey() {
 }
 
 function handleClearAll() {
-  if (!confirm('Удалить всю базу слов без возможности восстановления?')) return;
+  const gh = Storage.getState().github;
+  const warning = ghConfigured(gh)
+    ? 'Удалить всю базу слов без возможности восстановления?\nЭто также сотрёт синхронизированную копию в GitHub.'
+    : 'Удалить всю базу слов без возможности восстановления?';
+  if (!confirm(warning)) return;
   Storage.clearAll();
   renderDictionary();
   updateStudyIntro();
   renderDataView();
   showToast('База очищена');
+  scheduleSyncPush();
 }
 
 // ---------- wiring ----------
@@ -844,6 +1005,7 @@ function wireEvents() {
   document.getElementById('btn-export').addEventListener('click', handleExport);
   document.getElementById('import-file').addEventListener('change', handleImportFile);
   document.getElementById('btn-save-api-key').addEventListener('click', handleSaveApiKey);
+  document.getElementById('btn-sync-save').addEventListener('click', handleSyncSave);
   document.getElementById('btn-clear-all').addEventListener('click', handleClearAll);
 
   document.addEventListener('keydown', e => {
@@ -859,3 +1021,11 @@ function wireEvents() {
 initTheme();
 wireEvents();
 switchView('dictionary');
+
+// Тихая синхронизация в фоне — первая отрисовка не ждёт сеть,
+// а когда данные подтянутся, экран сам обновится.
+pullFromGithub(false).then(() => {
+  renderDictionary();
+  updateStudyIntro();
+  renderStats();
+});
