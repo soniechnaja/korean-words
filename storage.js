@@ -1,0 +1,160 @@
+// Слой хранения: всё живёт в localStorage этого браузера.
+const STORAGE_KEY = 'kw_words_v1';
+const STATE_KEY = 'kw_state_v1';
+
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function todayStr(date) {
+  const d = date ? new Date(date) : new Date();
+  return d.toISOString().slice(0, 10);
+}
+
+// Приводит слово к актуальной форме (примеры массивом, поля стадии обучения).
+// Нужно, потому что база могла быть создана более ранней версией сайта.
+function migrateWord(w) {
+  let examples = w.examples;
+  if (!Array.isArray(examples)) {
+    examples = w.example ? [w.example] : [];
+  }
+  return {
+    ...w,
+    examples,
+    srs: {
+      level: 0,
+      dueDate: Date.now(),
+      lastReviewed: null,
+      totalReviews: 0,
+      totalCorrect: 0,
+      stage: 1,
+      stageStreak: 0,
+      ...w.srs,
+    },
+  };
+}
+
+const Storage = {
+  getWords() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const words = raw ? JSON.parse(raw) : [];
+      return words.map(migrateWord);
+    } catch (e) {
+      console.error('Не удалось прочитать словарь', e);
+      return [];
+    }
+  },
+
+  saveWords(words) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(words));
+  },
+
+  addWord(word) {
+    const words = this.getWords();
+    const now = Date.now();
+    const entry = {
+      id: uid(),
+      korean: word.korean.trim(),
+      translation: word.translation.trim(),
+      transcription: (word.transcription || '').trim(),
+      category: (word.category || '').trim(),
+      examples: Array.isArray(word.examples) ? word.examples.filter(Boolean) : (word.example ? [word.example] : []),
+      notes: (word.notes || '').trim(),
+      createdAt: now,
+      srs: { level: 0, dueDate: now, lastReviewed: null, totalReviews: 0, totalCorrect: 0, stage: 1, stageStreak: 0 }
+    };
+    words.push(entry);
+    this.saveWords(words);
+    this.noteChange(1);
+    return entry;
+  },
+
+  updateWord(id, patch) {
+    const words = this.getWords();
+    const idx = words.findIndex(w => w.id === id);
+    if (idx === -1) return null;
+    words[idx] = { ...words[idx], ...patch };
+    this.saveWords(words);
+    this.noteChange(1);
+    return words[idx];
+  },
+
+  deleteWord(id) {
+    const words = this.getWords().filter(w => w.id !== id);
+    this.saveWords(words);
+    this.noteChange(1);
+  },
+
+  clearAll() {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STATE_KEY);
+  },
+
+  getState() {
+    try {
+      const raw = localStorage.getItem(STATE_KEY);
+      const state = raw ? JSON.parse(raw) : {};
+      return {
+        theme: null,
+        studyLog: {},
+        apiKey: '',
+        backup: { lastBackupAt: null, changesSinceBackup: 0 },
+        ...state,
+      };
+    } catch (e) {
+      return { theme: null, studyLog: {}, apiKey: '', backup: { lastBackupAt: null, changesSinceBackup: 0 } };
+    }
+  },
+
+  saveState(state) {
+    localStorage.setItem(STATE_KEY, JSON.stringify(state));
+  },
+
+  logReview(count) {
+    const state = this.getState();
+    const day = todayStr();
+    state.studyLog = state.studyLog || {};
+    state.studyLog[day] = (state.studyLog[day] || 0) + count;
+    this.saveState(state);
+  },
+
+  noteChange(n) {
+    const state = this.getState();
+    state.backup = state.backup || { lastBackupAt: null, changesSinceBackup: 0 };
+    state.backup.changesSinceBackup = (state.backup.changesSinceBackup || 0) + n;
+    this.saveState(state);
+  },
+
+  markBackedUp() {
+    const state = this.getState();
+    state.backup = { lastBackupAt: Date.now(), changesSinceBackup: 0 };
+    this.saveState(state);
+  },
+
+  exportJSON() {
+    return JSON.stringify({ words: this.getWords(), state: this.getState(), exportedAt: new Date().toISOString() }, null, 2);
+  },
+
+  importJSON(json, mode) {
+    const data = JSON.parse(json);
+    const incoming = (Array.isArray(data.words) ? data.words : Array.isArray(data) ? data : []).map(migrateWord);
+    if (mode === 'replace') {
+      this.saveWords(incoming);
+      if (data.state) this.saveState(data.state);
+      return { added: incoming.length, mode: 'replace' };
+    }
+    const existing = this.getWords();
+    const existingIds = new Set(existing.map(w => w.id));
+    let added = 0;
+    for (const w of incoming) {
+      if (!w.id || !existingIds.has(w.id)) {
+        existing.push({ ...w, id: w.id || uid() });
+        added++;
+      }
+    }
+    this.saveWords(existing);
+    this.noteChange(added);
+    return { added, mode: 'merge' };
+  }
+};

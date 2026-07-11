@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>내 단어장 — мой корейский словарь</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app">
+
+  <!-- Sidebar / nav -->
+  <nav class="nav">
+    <div class="nav-brand">
+      <span class="nav-brand-kr">단어장</span>
+      <span class="nav-brand-ru">мой словарь</span>
+    </div>
+    <button class="nav-btn active" data-view="dictionary">
+      <span class="nav-icon">📖</span> Словарь
+    </button>
+    <button class="nav-btn" data-view="study">
+      <span class="nav-icon">🎯</span> Учить
+      <span class="nav-badge" id="due-badge" hidden>0</span>
+    </button>
+    <button class="nav-btn" data-view="stats">
+      <span class="nav-icon">📊</span> Прогресс
+    </button>
+    <div class="nav-spacer"></div>
+    <button class="nav-btn nav-btn-ghost" data-view="data">
+      <span class="nav-icon">💾</span> Данные
+      <span class="nav-dot" id="backup-dot" hidden></span>
+    </button>
+    <button class="theme-toggle" id="theme-toggle" title="Тёмная / светлая тема">🌙</button>
+  </nav>
+
+  <!-- Mobile top bar -->
+  <div class="mobile-tabs">
+    <button class="mobile-tab active" data-view="dictionary">📖</button>
+    <button class="mobile-tab" data-view="study">🎯<span class="mobile-badge" id="due-badge-mobile" hidden>0</span></button>
+    <button class="mobile-tab" data-view="stats">📊</button>
+    <button class="mobile-tab" data-view="data">💾</button>
+  </div>
+
+  <main class="main">
+
+    <!-- ============ DICTIONARY VIEW ============ -->
+    <section class="view active" id="view-dictionary">
+      <header class="view-header">
+        <div>
+          <h1>Словарь</h1>
+          <p class="subtitle" id="dict-count">0 слов</p>
+        </div>
+        <div class="view-header-actions">
+          <button class="btn btn-ghost" id="btn-bulk-add">Массовое добавление</button>
+          <button class="btn btn-primary" id="btn-add-word">+ Добавить слово</button>
+        </div>
+      </header>
+
+      <div class="toolbar">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="search-input" placeholder="Поиск по слову, переводу, теме...">
+        </div>
+        <select id="sort-select" class="select">
+          <option value="new">Сначала новые</option>
+          <option value="old">Сначала старые</option>
+          <option value="az">По алфавиту (한글)</option>
+          <option value="hard">Сначала сложные</option>
+        </select>
+      </div>
+
+      <div class="chips" id="category-chips"></div>
+
+      <div class="word-list" id="word-list"></div>
+
+      <div class="empty-state" id="empty-state" hidden>
+        <div class="empty-emoji">🌱</div>
+        <p>Пока пусто. Добавь своё первое слово —<br>и база начнёт расти.</p>
+        <button class="btn btn-primary" id="btn-add-word-empty">+ Добавить слово</button>
+      </div>
+    </section>
+
+    <!-- ============ STUDY VIEW ============ -->
+    <section class="view" id="view-study">
+      <header class="view-header">
+        <div>
+          <h1>Учить</h1>
+          <p class="subtitle" id="study-subtitle">Готовимся...</p>
+        </div>
+      </header>
+
+      <div class="segmented mode-switch" id="study-mode-switch">
+        <button data-mode="words" class="active">Слова</button>
+        <button data-mode="writing">Письмо · уровень 4</button>
+      </div>
+
+      <div id="study-words-mode">
+        <div id="study-intro" class="study-intro">
+          <div class="study-stats-row">
+            <div class="stat-tile">
+              <div class="stat-num" id="stat-due">0</div>
+              <div class="stat-label">к повторению</div>
+            </div>
+            <div class="stat-tile">
+              <div class="stat-num" id="stat-new">0</div>
+              <div class="stat-label">новых слов</div>
+            </div>
+            <div class="stat-tile">
+              <div class="stat-num" id="stat-total-dict">0</div>
+              <div class="stat-label">всего в словаре</div>
+            </div>
+          </div>
+
+          <div class="session-size">
+            <span>Размер сессии:</span>
+            <div class="segmented" id="session-size">
+              <button data-size="10" class="active">10</button>
+              <button data-size="20">20</button>
+              <button data-size="9999">Все</button>
+            </div>
+          </div>
+
+          <button class="btn btn-primary btn-lg" id="btn-start-study">▶ Начать</button>
+          <p class="hint-text">1 — карточка · 2 — выбор перевода · 3 — вставить слово в предложение. Каждое слово начинает с 1-го уровня и поднимается, когда ты отвечаешь верно два раза подряд.</p>
+        </div>
+
+        <div id="study-session" class="study-session" hidden>
+          <div class="session-progress">
+            <div class="session-progress-bar"><div class="session-progress-fill" id="session-progress-fill"></div></div>
+            <span id="session-progress-label">1 / 10</span>
+          </div>
+
+          <div class="card-stage" id="card-stage"></div>
+        </div>
+
+        <div id="study-summary" class="study-summary" hidden>
+          <div class="summary-emoji">🎉</div>
+          <h2>Сессия завершена!</h2>
+          <div class="summary-stats">
+            <div><span id="summary-correct">0</span><small>правильно</small></div>
+            <div><span id="summary-total">0</span><small>всего</small></div>
+          </div>
+          <button class="btn btn-primary" id="btn-study-again">Повторить ещё</button>
+          <button class="btn btn-ghost" id="btn-study-done">К словарю</button>
+        </div>
+      </div>
+
+      <div id="study-writing-mode" hidden>
+        <div id="writing-intro" class="study-intro">
+          <p class="hint-text">Уровень 4 открывается словам, которые ты уверенно прошла на уровнях 1–3. Выбери тему — сайт даст несколько слов из неё, а ты напишешь своё предложение. Проверит Claude (нужен API-ключ в разделе «Данные»).</p>
+          <div class="chips" id="writing-category-chips"></div>
+          <p class="hint-text" id="writing-empty-hint" hidden>Пока нет тем с готовыми к письму словами — продолжай проходить уровни 1–3.</p>
+        </div>
+
+        <div id="writing-session" class="study-session" hidden>
+          <div class="flashcard writing-card">
+            <div class="card-category" id="writing-category-label"></div>
+            <div class="writing-words" id="writing-words-list"></div>
+            <textarea id="writing-input" rows="3" placeholder="Напиши своё предложение по-корейски, используя эти слова..."></textarea>
+            <div class="writing-actions">
+              <button class="btn btn-ghost" id="btn-writing-back">← К темам</button>
+              <button class="btn btn-primary" id="btn-writing-check">Проверить</button>
+            </div>
+            <div id="writing-result" class="writing-result" hidden></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ STATS VIEW ============ -->
+    <section class="view" id="view-stats">
+      <header class="view-header">
+        <div>
+          <h1>Прогресс</h1>
+          <p class="subtitle">Как продвигается изучение</p>
+        </div>
+      </header>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-card-num" id="s-total">0</div>
+          <div class="stat-card-label">слов в базе</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-num" id="s-learned">0</div>
+          <div class="stat-card-label">выучено уверенно</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-num" id="s-due">0</div>
+          <div class="stat-card-label">ждут повторения</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-num" id="s-streak">0</div>
+          <div class="stat-card-label">дней подряд</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Активность за 7 дней</h3>
+        <div class="bar-chart" id="activity-chart" data-palette="oklch-8"></div>
+      </div>
+
+      <div class="panel">
+        <h3>По темам</h3>
+        <div class="category-breakdown" id="category-breakdown"></div>
+      </div>
+    </section>
+
+    <!-- ============ DATA VIEW ============ -->
+    <section class="view" id="view-data">
+      <header class="view-header">
+        <div>
+          <h1>Данные</h1>
+          <p class="subtitle">Всё хранится локально, в этом браузере</p>
+        </div>
+      </header>
+
+      <div class="panel" id="backup-reminder-panel" hidden>
+        <div class="backup-reminder">
+          <span class="backup-reminder-icon">⏰</span>
+          <div>
+            <strong>Не забудь сделать резервную копию</strong>
+            <p class="hint-text" id="backup-reminder-text"></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Резервная копия</h3>
+        <p class="hint-text">Safari не умеет сохранять базу в файл автоматически, поэтому экспортируй её вручную время от времени — особенно после массового добавления слов. Так ты сможешь и восстановить базу, и закинуть файл на GitHub.</p>
+        <p class="hint-text" id="last-backup-text"></p>
+        <div class="data-actions">
+          <button class="btn btn-primary" id="btn-export">⬇ Экспортировать JSON</button>
+          <label class="btn btn-ghost file-btn">
+            ⬆ Импортировать JSON
+            <input type="file" id="import-file" accept="application/json" hidden>
+          </label>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Проверка письма (уровень 4)</h3>
+        <p class="hint-text">Чтобы Claude проверял твои предложения на уровне 4, вставь сюда свой API-ключ Anthropic. Ключ хранится только в этом браузере и отправляется напрямую в Anthropic при каждой проверке — я его не вижу.</p>
+        <label class="field">
+          <span>Anthropic API-ключ</span>
+          <input type="password" id="f-api-key" placeholder="sk-ant-...">
+        </label>
+        <div class="data-actions">
+          <button class="btn btn-ghost" id="btn-save-api-key">Сохранить ключ</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Опасная зона</h3>
+        <p class="hint-text">Удаляет всю базу слов из этого браузера безвозвратно.</p>
+        <button class="btn btn-danger" id="btn-clear-all">Удалить все слова</button>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ============ ADD / EDIT WORD MODAL ============ -->
+<div class="modal-overlay" id="word-modal-overlay" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="word-modal-title">Новое слово</h2>
+      <button class="modal-close" id="word-modal-close">✕</button>
+    </div>
+    <form id="word-form" class="modal-body">
+      <input type="hidden" id="f-id">
+      <label class="field">
+        <span>Слово по-корейски *</span>
+        <input type="text" id="f-korean" required placeholder="사랑">
+      </label>
+      <label class="field">
+        <span>Перевод *</span>
+        <input type="text" id="f-translation" required placeholder="любовь">
+      </label>
+      <label class="field">
+        <span>Транскрипция</span>
+        <input type="text" id="f-transcription" placeholder="са-ран">
+      </label>
+      <label class="field">
+        <span>Тема</span>
+        <input type="text" id="f-category" list="category-list" placeholder="эмоции">
+        <datalist id="category-list"></datalist>
+      </label>
+      <label class="field">
+        <span>Примеры (по одному предложению на строке)</span>
+        <textarea id="f-examples" rows="3" placeholder="사랑해요 — я люблю тебя"></textarea>
+      </label>
+      <label class="field">
+        <span>Заметка</span>
+        <textarea id="f-notes" rows="2" placeholder="любые свои пометки"></textarea>
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="btn-delete-word" hidden>Удалить</button>
+        <div class="modal-actions-right">
+          <button type="button" class="btn btn-ghost" id="word-modal-cancel">Отмена</button>
+          <button type="submit" class="btn btn-primary">Сохранить</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ BULK ADD MODAL ============ -->
+<div class="modal-overlay" id="bulk-modal-overlay" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Массовое добавление</h2>
+      <button class="modal-close" id="bulk-modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="hint-text">По одному слову на строке, поля через точку с запятой:<br>
+      <code>слово; перевод; транскрипция; тема; пример1 | пример2</code><br>
+      Перевод и слово обязательны, остальное можно опустить. Несколько примеров — через «|».</p>
+      <textarea id="bulk-input" rows="8" placeholder="사랑; любовь; са-ран; эмоции; 사랑해요
+안녕; привет; аннён"></textarea>
+      <div id="bulk-preview" class="bulk-preview"></div>
+    </div>
+    <div class="modal-actions" style="padding: 0 24px 24px;">
+      <span></span>
+      <div class="modal-actions-right">
+        <button type="button" class="btn btn-ghost" id="bulk-modal-cancel">Отмена</button>
+        <button type="button" class="btn btn-primary" id="btn-bulk-submit">Добавить слова</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="storage.js"></script>
+<script src="srs.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
