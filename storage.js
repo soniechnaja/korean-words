@@ -171,22 +171,30 @@ const Storage = {
   importJSON(json, mode) {
     const data = JSON.parse(json);
     const incoming = (Array.isArray(data.words) ? data.words : Array.isArray(data) ? data : []).map(migrateWord);
+    let added;
     if (mode === 'replace') {
       this.saveWords(incoming);
-      if (data.state) this.saveState(data.state);
-      return { added: incoming.length, mode: 'replace' };
-    }
-    const existing = this.getWords();
-    const existingIds = new Set(existing.map(w => w.id));
-    let added = 0;
-    for (const w of incoming) {
-      if (!w.id || !existingIds.has(w.id)) {
-        existing.push({ ...w, id: w.id || uid() });
-        added++;
+      added = incoming.length;
+    } else {
+      const existing = this.getWords();
+      const existingIds = new Set(existing.map(w => w.id));
+      added = 0;
+      for (const w of incoming) {
+        if (!w.id || !existingIds.has(w.id)) {
+          existing.push({ ...w, id: w.id || uid() });
+          added++;
+        }
       }
+      this.saveWords(existing);
     }
-    this.saveWords(existing);
+    // Из импортированного файла берём только историю занятий — секреты
+    // (API-ключи, токен GitHub, тема) этого браузера никогда не перезаписываем.
+    if (data.state && data.state.studyLog) {
+      const state = this.getState();
+      state.studyLog = { ...state.studyLog, ...data.state.studyLog };
+      this.saveState(state);
+    }
     this.noteChange(added);
-    return { added, mode: 'merge' };
+    return { added, mode };
   }
 };

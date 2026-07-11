@@ -814,7 +814,7 @@ async function pushToGithub(manual, knownMissing) {
     renderDataView();
   } catch (err) {
     console.warn('sync push failed', err);
-    if (manual) showToast(err.message || 'Не получилось синхронизировать');
+    showToast('Не получилось синхронизировать: ' + (err.message || 'ошибка'));
   }
 }
 
@@ -858,7 +858,7 @@ async function pullFromGithub(manual) {
     renderDataView();
   } catch (err) {
     console.warn('sync pull failed', err);
-    if (manual) showToast(err.message || 'Не получилось синхронизировать');
+    showToast('Не получилось синхронизировать: ' + (err.message || 'ошибка'));
   }
 }
 
