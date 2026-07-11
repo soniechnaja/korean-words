@@ -882,6 +882,16 @@ function handleSyncSave() {
   pullFromGithub(true);
 }
 
+// Аварийный вариант на случай рассинхронизации меток времени (например, после
+// старого бага с импортом) — просто заливает локальные данные поверх облака.
+function handleForceSyncPush() {
+  if (!confirm('Залить то, что есть на этом устройстве, в облако, не глядя на то, что там сейчас лежит?')) return;
+  const state = Storage.getState();
+  state.dataUpdatedAt = Date.now();
+  Storage.saveState(state);
+  pushToGithub(true);
+}
+
 function handleExport() {
   const json = Storage.exportJSON();
   const blob = new Blob([json], { type: 'application/json' });
@@ -1006,6 +1016,7 @@ function wireEvents() {
   document.getElementById('import-file').addEventListener('change', handleImportFile);
   document.getElementById('btn-save-api-key').addEventListener('click', handleSaveApiKey);
   document.getElementById('btn-sync-save').addEventListener('click', handleSyncSave);
+  document.getElementById('btn-sync-force-push').addEventListener('click', handleForceSyncPush);
   document.getElementById('btn-clear-all').addEventListener('click', handleClearAll);
 
   document.addEventListener('keydown', e => {
