@@ -321,23 +321,23 @@ body {
 .empty-emoji { font-size: 42px; margin-bottom: 12px; }
 
 /* ===================== Study ===================== */
-.study-stats-row {
+.study-block {
   display: flex;
-  gap: 12px;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-}
-.stat-tile {
-  flex: 1;
-  min-width: 130px;
+  align-items: center;
+  gap: 16px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 18px;
-  text-align: center;
+  padding: 18px 20px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
 }
-.stat-num { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.stat-label { font-size: 12.5px; color: var(--text-faint); margin-top: 2px; }
+.study-block-icon { font-size: 30px; flex-shrink: 0; }
+.study-block-body { flex: 1; min-width: 180px; }
+.study-block-title { font-weight: 700; font-size: 15.5px; }
+.study-block-sub { font-size: 13px; color: var(--text-faint); margin-top: 2px; }
+.study-block-sub b { color: var(--text); font-variant-numeric: tabular-nums; }
+.study-block .session-size { margin: 10px 0 0; }
 
 .session-size { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; font-size: 14px; color: var(--text-muted); }
 .segmented { display: flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }

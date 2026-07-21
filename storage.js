@@ -18,22 +18,46 @@ function migrateWord(w) {
   if (!Array.isArray(examples)) {
     examples = w.example ? [w.example] : [];
   }
+
+  const oldSrs = w.srs || {};
+  let srs;
+  if (oldSrs.learned !== undefined || oldSrs.reviewStep !== undefined) {
+    // Уже в актуальном формате — только подстрахуем дефолты недостающих полей
+    // (например, после добавления нового поля в будущем).
+    srs = {
+      stage: 1, stageStreak: 0, learned: false, reviewStep: -1, nextReviewDate: null,
+      inDailyBatch: false, totalReviews: 0, totalCorrect: 0, lastReviewed: null,
+      ...oldSrs,
+    };
+  } else {
+    // Старый формат (level 0-7 + dueDate + stage 1-4, без разделения на "новые"
+    // и "повтор"). Если слово уже дошло хотя бы до стадии 3 ("предложение") —
+    // считаем его выученным и переносим в очередь повторения, сохраняя точную
+    // дату повтора (dueDate), чтобы разом не обвалить сотни слов как "срочно
+    // повторить" в день обновления сайта. Иначе слово остаётся на текущей
+    // стадии (1 или 2) и просто попадёт в дневную пачку новых слов как обычно.
+    const wasLearned = (oldSrs.stage || 1) >= 3;
+    srs = {
+      stage: Math.min(oldSrs.stage || 1, 2),
+      stageStreak: 0,
+      learned: wasLearned,
+      // 5 = REVIEW_INTERVALS_DAYS.length - 1 в srs.js — держим в уме при правке той лестницы.
+      reviewStep: wasLearned ? Math.max(0, Math.min(oldSrs.level ?? 0, 5)) : -1,
+      nextReviewDate: wasLearned ? (oldSrs.dueDate ?? Date.now()) : null,
+      inDailyBatch: false,
+      totalReviews: oldSrs.totalReviews || 0,
+      totalCorrect: oldSrs.totalCorrect || 0,
+      lastReviewed: oldSrs.lastReviewed || null,
+    };
+  }
+
   return {
     ...w,
     examples,
     wordType: w.wordType || '',
     related: Array.isArray(w.related) ? w.related : [],
     updatedAt: w.updatedAt || w.createdAt || Date.now(),
-    srs: {
-      level: 0,
-      dueDate: Date.now(),
-      lastReviewed: null,
-      totalReviews: 0,
-      totalCorrect: 0,
-      stage: 1,
-      stageStreak: 0,
-      ...w.srs,
-    },
+    srs,
   };
 }
 
@@ -97,7 +121,10 @@ const Storage = {
       createdAt: now,
       updatedAt: now,
       related: [],
-      srs: { level: 0, dueDate: now, lastReviewed: null, totalReviews: 0, totalCorrect: 0, stage: 1, stageStreak: 0 }
+      srs: {
+        stage: 1, stageStreak: 0, learned: false, reviewStep: -1, nextReviewDate: null,
+        inDailyBatch: false, totalReviews: 0, totalCorrect: 0, lastReviewed: null,
+      },
     };
     words.push(entry);
     this.saveWords(words);
@@ -178,6 +205,7 @@ const Storage = {
         backup: { lastBackupAt: null, changesSinceBackup: 0 },
         dataUpdatedAt: 0,
         lastSeenStreak: 0, // для анимации цветка-стрика — чисто локальное, не синхронизируется
+        dailyGoal: 15,
         github: { token: '', owner: '', repo: 'korean-words-data', path: 'data.json', sha: null, lastSyncAt: null },
         ...state,
       };

@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="단어장">
 <!-- bump ?v= below on every deploy so browsers don't serve stale cached files -->
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 
@@ -101,34 +101,41 @@
 
       <div class="segmented mode-switch" id="study-mode-switch">
         <button data-mode="words" class="active">Слова</button>
-        <button data-mode="writing">Письмо · уровень 4</button>
+        <button data-mode="writing">Письмо</button>
       </div>
 
       <div id="study-words-mode">
         <div id="study-intro" class="study-intro">
-          <div class="study-stats-row">
-            <div class="stat-tile">
-              <div class="stat-num" id="stat-due">0</div>
-              <div class="stat-label">к повторению</div>
+
+          <div class="study-block" id="review-block" hidden>
+            <div class="study-block-icon">🔁</div>
+            <div class="study-block-body">
+              <div class="study-block-title">Повторить</div>
+              <div class="study-block-sub"><b id="review-due-count">0</b> <span id="review-due-word">слов</span> ждут повторения</div>
             </div>
-            <div class="stat-tile">
-              <div class="stat-num" id="stat-new">0</div>
-              <div class="stat-label">новых слов</div>
-            </div>
-            <div class="stat-tile">
-              <div class="stat-num" id="stat-total-dict">0</div>
-              <div class="stat-label">всего в словаре</div>
-            </div>
+            <button class="btn btn-primary" id="btn-start-review">Повторить</button>
           </div>
 
-          <div class="session-size">
-            <span>Размер сессии:</span>
-            <div class="segmented" id="session-size">
-              <button data-size="10" class="active">10</button>
-              <button data-size="20">20</button>
-              <button data-size="9999">Все</button>
+          <div class="study-block" id="new-words-block" hidden>
+            <div class="study-block-icon">🌱</div>
+            <div class="study-block-body">
+              <div class="study-block-title">Учить новые</div>
+              <div class="study-block-sub">Выучено сегодня: <b id="daily-progress-label">0 из 15</b></div>
+              <div class="session-size">
+                <span>Дневная цель:</span>
+                <div class="segmented" id="daily-goal">
+                  <button data-goal="15" class="active">15</button>
+                  <button data-goal="25">25</button>
+                  <button data-goal="35">35</button>
+                  <button data-goal="50">50</button>
+                </div>
+              </div>
             </div>
+            <button class="btn btn-primary" id="btn-start-new">Учить новые</button>
           </div>
+
+          <p class="hint-text" id="all-learned-hint" hidden>Все слова в словаре выучены — загляни в «Повторить», когда наступит дата следующего повтора.</p>
+          <p class="hint-text" id="empty-dict-hint" hidden>Сначала добавь слова в словарь.</p>
 
           <div class="session-size">
             <span>Направление:</span>
@@ -138,9 +145,7 @@
               <button data-dir="mixed">Вперемешку</button>
             </div>
           </div>
-
-          <button class="btn btn-primary btn-lg" id="btn-start-study">▶ Начать</button>
-          <p class="hint-text">1 — карточка · 2 — выбор перевода · 3 — вставить слово в предложение. Каждое слово начинает с 1-го уровня и поднимается, когда ты отвечаешь верно два раза подряд. Направление «рус → 한» работает для уровней 1 и 2 — на уровне 3 всегда нужно вставить именно корейское слово в предложение.</p>
+          <p class="hint-text">Карточка → выбор перевода: 2 верных ответа подряд поднимают слово на стадию выше. После 2-й стадии слово «выучено» и уходит в очередь повторения по интервалам (1 → 3 → 5 → 7 → 14 → 30 дней); неверный ответ на повторении откатывает на шаг назад, а не на ноль.</p>
         </div>
 
         <div id="study-session" class="study-session" hidden>
@@ -166,9 +171,9 @@
 
       <div id="study-writing-mode" hidden>
         <div id="writing-intro" class="study-intro">
-          <p class="hint-text">Уровень 4 открывается словам, которые ты уверенно прошла на уровнях 1–3. Выбери тему — сайт даст несколько слов из неё, а ты напишешь своё предложение. Проверит Claude (нужен API-ключ в разделе «Данные»).</p>
+          <p class="hint-text">Открывается словам, которые пережили хотя бы 2 успешных повтора в очереди повторения. Выбери тему — сайт даст несколько слов из неё, а ты напишешь своё предложение. Проверит Claude (нужен API-ключ в разделе «Данные»).</p>
           <div class="chips" id="writing-category-chips"></div>
-          <p class="hint-text" id="writing-empty-hint" hidden>Пока нет тем с готовыми к письму словами — продолжай проходить уровни 1–3.</p>
+          <p class="hint-text" id="writing-empty-hint" hidden>Пока нет тем с готовыми к письму словами — продолжай проходить повторения.</p>
         </div>
 
         <div id="writing-session" class="study-session" hidden>
@@ -425,8 +430,8 @@
 
 <div class="toast" id="toast" hidden></div>
 
-<script src="storage.js?v=9"></script>
-<script src="srs.js?v=9"></script>
-<script src="app.js?v=9"></script>
+<script src="storage.js?v=10"></script>
+<script src="srs.js?v=10"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>

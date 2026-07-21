@@ -5,7 +5,6 @@
 // ============================================================
 
 let dictState = { searchTerm: '', activeCategory: null, activeType: null, sortMode: 'new' };
-let sessionSizeLimit = 10;
 let sessionDirection = 'kr-ru'; // 'kr-ru' | 'ru-kr' | 'mixed'
 let studySession = null; // { queue, index, correct, reviewed }
 let writingSession = null; // { category, words }
@@ -170,8 +169,8 @@ function renderTypeChips(words) {
 }
 
 function levelBadge(w) {
+  if (SRS.isLearned(w)) return { label: 'выучено', mastered: true };
   if (w.srs.totalReviews === 0) return { label: 'новое', mastered: false };
-  if (SRS.isMastered(w)) return { label: 'выучено', mastered: true };
   return { label: `учу · ур.${w.srs.stage}`, mastered: false };
 }
 
@@ -213,7 +212,11 @@ function renderDictionary() {
   switch (dictState.sortMode) {
     case 'old': filtered.sort((a, b) => a.createdAt - b.createdAt); break;
     case 'az': filtered.sort((a, b) => a.korean.localeCompare(b.korean, 'ko')); break;
-    case 'hard': filtered.sort((a, b) => a.srs.level - b.srs.level || a.srs.dueDate - b.srs.dueDate); break;
+    case 'hard': filtered.sort((a, b) => {
+      if (a.srs.learned !== b.srs.learned) return a.srs.learned ? 1 : -1; // невыученные считаем "сложнее"
+      if (!a.srs.learned) return a.srs.stage - b.srs.stage;
+      return (a.srs.reviewStep - b.srs.reviewStep) || ((a.srs.nextReviewDate || 0) - (b.srs.nextReviewDate || 0));
+    }); break;
     default: filtered.sort((a, b) => b.createdAt - a.createdAt);
   }
 
@@ -391,11 +394,11 @@ function switchStudyMode(mode) {
   if (mode === 'writing') renderWritingIntro();
 }
 
-// ---------- study: words (levels 1-3) ----------
+// ---------- study: new words (daily batch) + spaced-repetition review ----------
 
 function refreshNavBadges() {
   const words = Storage.getWords();
-  const dueCount = words.filter(w => SRS.isDue(w)).length;
+  const dueCount = words.filter(w => SRS.isReviewDue(w)).length;
   const dueBadge = document.getElementById('due-badge');
   const dueBadgeMobile = document.getElementById('due-badge-mobile');
   [dueBadge, dueBadgeMobile].forEach(el => {
@@ -409,19 +412,71 @@ function refreshNavBadges() {
   document.getElementById('backup-dot').hidden = !needsBackup;
 }
 
+// Дневная пачка новых слов — следующие N (по порядку добавления) невыученных
+// слов, которые не входят ни в какую предыдущую пачку. Пачка "закрепляется":
+// пока в ней остаётся хоть одно невыученное слово, повторные вызовы отдают
+// тот же набор — новая пачка формируется только когда предыдущая полностью
+// пройдена (все её слова получили srs.learned = true).
+// Возвращает { active: ещё не выученные слова пачки, all: вся пачка целиком }.
+function ensureDailyBatch(words, dailyGoal) {
+  const inProgress = words.filter(w => w.srs.inDailyBatch && !w.srs.learned);
+  if (inProgress.length > 0) {
+    return { active: inProgress, all: words.filter(w => w.srs.inDailyBatch) };
+  }
+
+  // Прошлая пачка (если была) полностью выучена. Снимаем с неё флаг в любом
+  // случае — она своё отработала, — но новую назначаем только если в базе
+  // вообще остались невыученные слова, иначе блок "Учить новые" просто
+  // скроется (см. updateStudyIntro), а не покажет пустую "0 из 0".
+  const hadBatch = words.some(w => w.srs.inDailyBatch);
+  if (hadBatch) {
+    words.filter(w => w.srs.inDailyBatch).forEach(w => {
+      Storage.updateWord(w.id, { srs: { ...w.srs, inDailyBatch: false } });
+    });
+  }
+
+  const candidates = Storage.getWords()
+    .filter(w => !w.srs.learned)
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .slice(0, dailyGoal);
+  if (candidates.length === 0) return { active: [], all: [] };
+
+  candidates.forEach(w => {
+    Storage.updateWord(w.id, { srs: { ...w.srs, inDailyBatch: true } });
+  });
+
+  const batchWords = Storage.getWords().filter(w => w.srs.inDailyBatch);
+  return { active: batchWords.filter(w => !w.srs.learned), all: batchWords };
+}
+
 function updateStudyIntro() {
   const words = Storage.getWords();
-  const due = words.filter(w => SRS.isDue(w) && w.srs.totalReviews > 0).length;
-  const fresh = words.filter(w => w.srs.totalReviews === 0).length;
+  const state = Storage.getState();
+  const dailyGoal = state.dailyGoal || 15;
 
-  document.getElementById('stat-due').textContent = due;
-  document.getElementById('stat-new').textContent = fresh;
-  document.getElementById('stat-total-dict').textContent = words.length;
+  const reviewDue = words.filter(w => SRS.isReviewDue(w));
+  const { all: batchAll } = ensureDailyBatch(words, dailyGoal);
+
+  document.getElementById('review-block').hidden = reviewDue.length === 0;
+  document.getElementById('review-due-count').textContent = reviewDue.length;
+  document.getElementById('review-due-word').textContent = pluralizeSlovo(reviewDue.length);
+
+  document.getElementById('new-words-block').hidden = batchAll.length === 0;
+  if (batchAll.length > 0) {
+    const learnedInBatch = batchAll.filter(w => w.srs.learned).length;
+    document.getElementById('daily-progress-label').textContent = `${learnedInBatch} из ${batchAll.length}`;
+  }
+  document.querySelectorAll('#daily-goal button').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.goal, 10) === dailyGoal);
+  });
+
+  document.getElementById('empty-dict-hint').hidden = words.length !== 0;
+  document.getElementById('all-learned-hint').hidden = !(words.length > 0 && batchAll.length === 0 && reviewDue.length === 0);
 
   const subtitle = document.getElementById('study-subtitle');
   if (words.length === 0) subtitle.textContent = 'Сначала добавь слова в словарь';
-  else if (due + fresh === 0) subtitle.textContent = 'Всё повторено — заходи завтра';
-  else subtitle.textContent = `Готово к повторению: ${due + fresh}`;
+  else if (reviewDue.length === 0 && batchAll.length === 0) subtitle.textContent = 'Всё сделано — загляни попозже';
+  else subtitle.textContent = 'Выбери, с чего начать';
 
   document.getElementById('study-intro').hidden = false;
   document.getElementById('study-session').hidden = true;
@@ -429,35 +484,55 @@ function updateStudyIntro() {
   refreshNavBadges();
 }
 
-// Уровень слова (1-3) определяет тип упражнения; слова уровня 4 используют
-// тот же тип, что и 3-й, но дополнительно открываются для практики "Письмо".
-function pickCardMode(word, allWords) {
-  const stage = Math.min(word.srs.stage, 3);
-
-  if (stage === 1) return 'flash';
-
+// Новые слова: стадия 1 — карточка, стадия 2 — выбор перевода. После стадии 2
+// слово выпускается в очередь повторения (см. SRS.gradeNewWord).
+function pickNewWordCardMode(word, allWords) {
+  if (word.srs.stage <= 1) return 'flash';
   const otherTranslations = new Set(
     allWords.filter(w => w.id !== word.id && w.translation !== word.translation).map(w => w.translation)
   );
-  const canQuiz = otherTranslations.size >= 3;
-
-  if (stage === 2) return canQuiz ? 'quiz' : 'flash';
-
-  // stage 3: подставить слово в предложение
-  const usableExamples = (word.examples || []).filter(ex => ex.includes(word.korean));
-  const otherKoreans = new Set(allWords.filter(w => w.id !== word.id && w.korean !== word.korean).map(w => w.korean));
-  if (usableExamples.length > 0 && otherKoreans.size >= 3) return 'fillblank';
-  return canQuiz ? 'quiz' : 'flash';
+  return otherTranslations.size >= 3 ? 'quiz' : 'flash';
 }
 
-function startStudySession() {
+// Повторение: чередуем выбор перевода и вставку слова в предложение — оба дают
+// чистый верно/неверно для SRS.gradeReview. Флешкарта — запасной вариант для
+// совсем маленького словаря, где не набрать вариантов для quiz/fillblank.
+function pickReviewCardMode(word, allWords) {
+  const usableExamples = (word.examples || []).filter(ex => ex.includes(word.korean));
+  const otherKoreans = new Set(allWords.filter(w => w.id !== word.id && w.korean !== word.korean).map(w => w.korean));
+  const otherTranslations = new Set(allWords.filter(w => w.id !== word.id && w.translation !== word.translation).map(w => w.translation));
+  const canFillblank = usableExamples.length > 0 && otherKoreans.size >= 3;
+  const canQuiz = otherTranslations.size >= 3;
+  if (canFillblank && canQuiz) return Math.random() < 0.5 ? 'fillblank' : 'quiz';
+  if (canFillblank) return 'fillblank';
+  if (canQuiz) return 'quiz';
+  return 'flash';
+}
+
+function startNewWordSession() {
   const words = Storage.getWords();
-  const pool = shuffle(words.filter(w => SRS.isDue(w)));
-  if (pool.length === 0) {
+  const state = Storage.getState();
+  const { active } = ensureDailyBatch(words, state.dailyGoal || 15);
+  if (active.length === 0) {
+    showToast('Дневная пачка уже пройдена! 🎉');
+    updateStudyIntro();
+    return;
+  }
+  studySession = { type: 'new', queue: shuffle(active), index: 0, correct: 0, reviewed: 0 };
+  document.getElementById('study-intro').hidden = true;
+  document.getElementById('study-summary').hidden = true;
+  document.getElementById('study-session').hidden = false;
+  renderCurrentCard();
+}
+
+function startReviewSession() {
+  const words = Storage.getWords();
+  const due = shuffle(words.filter(w => SRS.isReviewDue(w)));
+  if (due.length === 0) {
     showToast('Нет слов для повторения. Отличная работа! 🎉');
     return;
   }
-  studySession = { queue: pool.slice(0, sessionSizeLimit), index: 0, correct: 0, reviewed: 0 };
+  studySession = { type: 'review', queue: due, index: 0, correct: 0, reviewed: 0 };
   document.getElementById('study-intro').hidden = true;
   document.getElementById('study-summary').hidden = true;
   document.getElementById('study-session').hidden = false;
@@ -475,10 +550,11 @@ function renderCurrentCard() {
   updateSessionProgress();
   const word = studySession.queue[studySession.index];
   const allWords = Storage.getWords();
-  const mode = pickCardMode(word, allWords);
+  const isReview = studySession.type === 'review';
+  const mode = isReview ? pickReviewCardMode(word, allWords) : pickNewWordCardMode(word, allWords);
   const direction = sessionDirection === 'mixed' ? (Math.random() < 0.5 ? 'kr-ru' : 'ru-kr') : sessionDirection;
   const reverse = direction === 'ru-kr';
-  const stageTag = word.srs.stage >= 4 ? 'готово к письму' : `уровень ${Math.min(word.srs.stage, 3)}`;
+  const stageTag = isReview ? `повтор · шаг ${word.srs.reviewStep + 1}` : `новое · стадия ${word.srs.stage}`;
   const stage = document.getElementById('card-stage');
 
   if (mode === 'flash') {
@@ -597,9 +673,10 @@ function renderCurrentCard() {
 
 function gradeCurrent(grade) {
   const word = studySession.queue[studySession.index];
-  const newSrs = SRS.grade(word, grade);
+  const isCorrect = grade === 'good' || grade === 'easy';
+  const newSrs = studySession.type === 'review' ? SRS.gradeReview(word, isCorrect) : SRS.gradeNewWord(word, isCorrect);
   Storage.updateWord(word.id, { srs: newSrs });
-  if (grade === 'good' || grade === 'easy') studySession.correct++;
+  if (isCorrect) studySession.correct++;
   studySession.reviewed++;
   studySession.index++;
   if (studySession.index >= studySession.queue.length) {
@@ -624,7 +701,7 @@ function renderWritingIntro() {
   document.getElementById('writing-session').hidden = true;
   document.getElementById('writing-intro').hidden = false;
 
-  const words = Storage.getWords().filter(w => w.srs.stage >= 4);
+  const words = Storage.getWords().filter(w => SRS.isWritingReady(w));
   const counts = {};
   words.forEach(w => {
     const cat = w.category || 'без темы';
@@ -644,7 +721,7 @@ function renderWritingIntro() {
 }
 
 function startWritingSession(category) {
-  const words = Storage.getWords().filter(w => w.srs.stage >= 4 && (w.category || 'без темы') === category);
+  const words = Storage.getWords().filter(w => SRS.isWritingReady(w) && (w.category || 'без темы') === category);
   const picked = shuffle(words).slice(0, 4);
   writingSession = { category, words: picked };
 
@@ -729,7 +806,7 @@ async function handleWritingCheck() {
     const verdict = await callClaudeWritingCheck(sentence, writingSession.words, writingSession.category);
 
     writingSession.words.forEach(w => {
-      const newSrs = SRS.grade(w, verdict.correct ? 'good' : 'hard');
+      const newSrs = SRS.gradeReview(w, verdict.correct);
       Storage.updateWord(w.id, { srs: newSrs });
     });
 
@@ -987,8 +1064,8 @@ function renderStats() {
   const words = Storage.getWords();
   const state = Storage.getState();
   document.getElementById('s-total').textContent = words.length;
-  document.getElementById('s-learned').textContent = words.filter(w => SRS.isMastered(w)).length;
-  document.getElementById('s-due').textContent = words.filter(w => SRS.isDue(w)).length;
+  document.getElementById('s-learned').textContent = words.filter(w => SRS.isLearned(w)).length;
+  document.getElementById('s-due').textContent = words.filter(w => SRS.isReviewDue(w)).length;
   renderStreakFlower(state.studyLog || {}, state);
   renderActivityHeatmap(state.studyLog || {});
   renderCategoryBreakdown(words);
@@ -1319,11 +1396,14 @@ function wireEvents() {
     btn.addEventListener('click', () => switchStudyMode(btn.dataset.mode));
   });
 
-  document.getElementById('session-size').querySelectorAll('button').forEach(btn => {
+  document.getElementById('daily-goal').querySelectorAll('button').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('#session-size button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('#daily-goal button').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      sessionSizeLimit = parseInt(btn.dataset.size, 10);
+      const state = Storage.getState();
+      state.dailyGoal = parseInt(btn.dataset.goal, 10);
+      Storage.saveState(state);
+      updateStudyIntro();
     });
   });
   document.getElementById('session-direction').querySelectorAll('button').forEach(btn => {
@@ -1338,10 +1418,12 @@ function wireEvents() {
     const speakBtn = e.target.closest('.speak-btn');
     if (speakBtn) speakKorean(speakBtn.dataset.speak);
   });
-  document.getElementById('btn-start-study').addEventListener('click', startStudySession);
+  document.getElementById('btn-start-new').addEventListener('click', startNewWordSession);
+  document.getElementById('btn-start-review').addEventListener('click', startReviewSession);
   document.getElementById('btn-study-again').addEventListener('click', () => {
     document.getElementById('study-summary').hidden = true;
-    startStudySession();
+    if (studySession && studySession.type === 'review') startReviewSession();
+    else startNewWordSession();
   });
   document.getElementById('btn-study-done').addEventListener('click', () => {
     document.getElementById('study-summary').hidden = true;
