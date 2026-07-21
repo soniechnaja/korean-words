@@ -1186,7 +1186,6 @@ function wireEvents() {
     fillRelatedWordSelect(updated);
   });
 
-
   document.getElementById('btn-bulk-add').addEventListener('click', openBulkModal);
   document.getElementById('bulk-modal-close').addEventListener('click', closeBulkModal);
   document.getElementById('bulk-modal-cancel').addEventListener('click', closeBulkModal);
@@ -1253,6 +1252,12 @@ initTheme();
 initSpeech();
 wireEvents();
 switchView('dictionary');
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js').catch(err => console.warn('SW register failed', err));
+  });
+}
 
 // Тихая синхронизация в фоне — первая отрисовка не ждёт сеть,
 // а когда данные подтянутся, экран сам обновится.
