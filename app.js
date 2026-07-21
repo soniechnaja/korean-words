@@ -424,12 +424,31 @@ function handleDeleteWord() {
 
 // ---------- bulk add ----------
 
+// "韓=Корея,食:식=еда" -> [{char:'韓', meaningInWord:'Корея', explicitReading:''}, {char:'食', meaningInWord:'еда', explicitReading:'식'}]
+// "иероглиф:чтение=значение" — чтение нужно только если иероглифа ещё нет в базе.
+function parseHanjaField(raw) {
+  if (!raw) return [];
+  return raw.split(',').map(s => s.trim()).filter(Boolean).map(entry => {
+    const eqIdx = entry.indexOf('=');
+    if (eqIdx === -1) return null;
+    const left = entry.slice(0, eqIdx).trim();
+    const meaningInWord = entry.slice(eqIdx + 1).trim();
+    if (!left || !meaningInWord) return null;
+    const colonIdx = left.indexOf(':');
+    const char = (colonIdx === -1 ? left : left.slice(0, colonIdx)).trim();
+    const explicitReading = colonIdx === -1 ? '' : left.slice(colonIdx + 1).trim();
+    if (!char) return null;
+    return { char, meaningInWord, explicitReading };
+  }).filter(Boolean);
+}
+
 function parseBulkLine(line) {
   const parts = line.split(';').map(p => p.trim());
-  const [korean, translation, transcription, category, examplesRaw] = parts;
+  const [korean, translation, transcription, category, wordType, hanjaRaw, examplesRaw] = parts;
   if (!korean || !translation) return { ok: false, line };
   const examples = examplesRaw ? examplesRaw.split('|').map(s => s.trim()).filter(Boolean) : [];
-  return { ok: true, korean, translation, transcription, category, examples };
+  const hanja = parseHanjaField(hanjaRaw);
+  return { ok: true, korean, translation, transcription, category, wordType, hanja, examples };
 }
 
 function renderBulkPreview() {
@@ -459,7 +478,20 @@ function handleBulkSubmit() {
   const raw = document.getElementById('bulk-input').value;
   const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
   const parsed = lines.map(parseBulkLine).filter(p => p.ok);
-  parsed.forEach(p => Storage.addWord(p));
+  parsed.forEach(p => {
+    // Иероглиф без чтения, которого ещё нет в базе, регистрируем сразу с этим
+    // чтением; если чтения не дали — слово всё равно получит свою ханчу, просто
+    // во вкладке «Иероглифика» она пока покажется без чтения из общей базы.
+    p.hanja.forEach(h => {
+      if (h.explicitReading && !Storage.findHanja(h.char)) {
+        Storage.upsertCustomHanja(h.char, h.explicitReading, h.meaningInWord);
+      }
+    });
+    Storage.addWord({
+      ...p,
+      hanja: p.hanja.map(h => ({ char: h.char, meaningInWord: h.meaningInWord })),
+    });
+  });
   closeBulkModal();
   renderDictionary();
   showToast(`Добавлено слов: ${parsed.length}`);

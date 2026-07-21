@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="단어장">
 <!-- bump ?v= below on every deploy so browsers don't serve stale cached files -->
-<link rel="stylesheet" href="style.css?v=11">
+<link rel="stylesheet" href="style.css?v=12">
 </head>
 <body>
 
@@ -463,9 +463,10 @@
     </div>
     <div class="modal-body">
       <p class="hint-text">По одному слову на строке, поля через точку с запятой:<br>
-      <code>слово; перевод; транскрипция; тема; пример1 | пример2</code><br>
-      Перевод и слово обязательны, остальное можно опустить. Несколько примеров — через «|».</p>
-      <textarea id="bulk-input" rows="8" placeholder="사랑; любовь; са-ран; эмоции; 사랑해요
+      <code>слово; перевод; транскрипция; тема; тип; ханча; пример1 | пример2</code><br>
+      Обязательны только слово и перевод — остальные поля можно оставлять пустыми (просто «;;» подряд). Тип — как в форме слова (Существительное, Глагол…). Ханча — через запятую, «иероглиф=значение» (韓=Корея), а если иероглифа ещё нет в базе — «иероглиф:чтение=значение» (食:식=еда). Несколько примеров — через «|».</p>
+      <textarea id="bulk-input" rows="8" placeholder="사랑; любовь; са-ран; эмоции; Существительное; ; 사랑해요
+한식; корейская еда; ; еда; Существительное; 韓=Корея,食=еда
 안녕; привет; аннён"></textarea>
       <div id="bulk-preview" class="bulk-preview"></div>
     </div>
@@ -481,9 +482,9 @@
 
 <div class="toast" id="toast" hidden></div>
 
-<script src="hanja-data.js?v=11"></script>
-<script src="storage.js?v=11"></script>
-<script src="srs.js?v=11"></script>
-<script src="app.js?v=11"></script>
+<script src="hanja-data.js?v=12"></script>
+<script src="storage.js?v=12"></script>
+<script src="srs.js?v=12"></script>
+<script src="app.js?v=12"></script>
 </body>
 </html>
