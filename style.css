@@ -475,50 +475,17 @@ body {
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; margin-bottom: 18px; }
 .panel h3 { margin: 0 0 18px; font-size: 15px; }
 
-.bar-chart {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  height: 140px;
-  padding-top: 20px;
-  position: relative;
-}
-.bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; position: relative; }
-.bar-value-label {
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--accent);
-  margin-bottom: 4px;
-  font-variant-numeric: tabular-nums;
-}
-.bar-fill {
-  width: 60%;
-  min-height: 4px;
-  background: var(--accent);
-  border-radius: 4px 4px 0 0;
-  cursor: default;
-}
-.bar-fill.zero { background: var(--baseline); }
-.bar-day-label { font-size: 11px; color: var(--text-faint); margin-top: 8px; }
-.bar-day-label.today { color: var(--accent); font-weight: 700; }
-
-.chart-tooltip {
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--text);
-  color: var(--bg);
-  font-size: 11.5px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  white-space: nowrap;
-  margin-bottom: 6px;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity .1s ease;
-}
-.bar-col:hover .chart-tooltip { opacity: 1; }
+.heat-scroll { overflow-x: auto; padding-bottom: 4px; }
+.heat-grid { display: inline-grid; gap: 3px; }
+.heat-cell { width: 12px; height: 12px; border-radius: 3px; background: var(--surface-2); cursor: default; }
+.heat-cell.level-1 { background: color-mix(in srgb, var(--accent) 25%, var(--surface-2)); }
+.heat-cell.level-2 { background: color-mix(in srgb, var(--accent) 50%, var(--surface-2)); }
+.heat-cell.level-3 { background: color-mix(in srgb, var(--accent) 75%, var(--surface-2)); }
+.heat-cell.level-4 { background: var(--accent); }
+.heat-month { font-size: 11px; color: var(--text-faint); align-self: end; white-space: nowrap; grid-row: 1; }
+.heat-daylabel { font-size: 10px; color: var(--text-faint); display: flex; align-items: center; grid-column: 1; }
+.heat-legend { display: flex; align-items: center; gap: 4px; margin-top: 10px; font-size: 11px; color: var(--text-faint); }
+.heat-legend .heat-cell { width: 10px; height: 10px; }
 
 .category-breakdown { display: flex; flex-direction: column; gap: 10px; }
 .cat-row { display: flex; align-items: center; gap: 10px; }

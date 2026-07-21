@@ -703,34 +703,84 @@ function computeStreak(log) {
   return count;
 }
 
-function renderActivityChart(log) {
-  const dayLetters = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+const HEATMAP_WEEKS = 26; // ~6 месяцев
+
+// Уровень интенсивности (0-4) считаем относительно собственного максимума за
+// период, а не по фиксированным порогам — иначе у того, кто учит по 10 слов
+// в сессию, вся сетка была бы одного цвета рядом с тем, кто проходит по 100.
+function heatmapLevels(counts) {
+  const max = Math.max(...counts, 0);
+  if (max === 0) return counts.map(() => 0);
+  const t1 = Math.max(1, Math.ceil(max * 0.25));
+  const t2 = Math.max(t1 + 1, Math.ceil(max * 0.5));
+  const t3 = Math.max(t2 + 1, Math.ceil(max * 0.75));
+  return counts.map(c => {
+    if (c === 0) return 0;
+    if (c <= t1) return 1;
+    if (c <= t2) return 2;
+    if (c <= t3) return 3;
+    return 4;
+  });
+}
+
+function renderActivityHeatmap(log) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const start = new Date(today);
+  start.setDate(start.getDate() - (HEATMAP_WEEKS * 7 - 1));
+  const startDow = (start.getDay() + 6) % 7; // 0 = понедельник — довыравниваем до полных недель
+  start.setDate(start.getDate() - startDow);
+
   const days = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    days.push(d);
+  for (const d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
+    days.push(new Date(d));
   }
+
   const counts = days.map(d => log[todayStr(d)] || 0);
-  const maxVal = Math.max(...counts, 1);
-  const today = todayStr();
+  const levels = heatmapLevels(counts);
+  const weeks = Math.ceil(days.length / 7);
 
-  const html = days.map((d, i) => {
+  let lastMonth = null;
+  let monthsHtml = '';
+  let cellsHtml = '';
+
+  days.forEach((d, i) => {
+    const weekIndex = Math.floor(i / 7);
+    const dow = (d.getDay() + 6) % 7;
+
+    if (d.getDate() <= 7 && d.getMonth() !== lastMonth) {
+      lastMonth = d.getMonth();
+      const label = d.toLocaleDateString('ru-RU', { month: 'short' });
+      monthsHtml += `<div class="heat-month" style="grid-column:${weekIndex + 2};">${esc(label)}</div>`;
+    }
+
+    const dateLabel = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
     const count = counts[i];
-    const isToday = todayStr(d) === today;
-    const heightPct = Math.round((count / maxVal) * 100);
-    const dateLabel = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
-    return `
-      <div class="bar-col">
-        <div class="chart-tooltip">${esc(dateLabel)}: ${count} ${pluralizeSlovo(count)}</div>
-        ${isToday ? `<div class="bar-value-label">${count}</div>` : ''}
-        <div class="bar-fill ${count === 0 ? 'zero' : ''}" style="height:${count === 0 ? '4px' : heightPct + '%'}"></div>
-        <div class="bar-day-label ${isToday ? 'today' : ''}">${dayLetters[d.getDay()]}</div>
-      </div>
-    `;
-  }).join('');
+    cellsHtml += `<div class="heat-cell level-${levels[i]}" style="grid-column:${weekIndex + 2}; grid-row:${dow + 2};" title="${esc(dateLabel)}: ${count} ${esc(pluralizeSlovo(count))}"></div>`;
+  });
 
-  document.getElementById('activity-chart').innerHTML = html;
+  const dayLabels = ['Пн', '', 'Ср', '', 'Пт', '', ''];
+  const dayLabelsHtml = dayLabels.map((l, i) => `<div class="heat-daylabel" style="grid-row:${i + 2};">${esc(l)}</div>`).join('');
+
+  document.getElementById('activity-chart').innerHTML = `
+    <div class="heat-scroll">
+      <div class="heat-grid" style="grid-template-columns: 26px repeat(${weeks}, 12px); grid-template-rows: 16px repeat(7, 12px);">
+        ${monthsHtml}
+        ${dayLabelsHtml}
+        ${cellsHtml}
+      </div>
+    </div>
+    <div class="heat-legend">
+      <span>Меньше</span>
+      <span class="heat-cell level-0"></span>
+      <span class="heat-cell level-1"></span>
+      <span class="heat-cell level-2"></span>
+      <span class="heat-cell level-3"></span>
+      <span class="heat-cell level-4"></span>
+      <span>больше</span>
+    </div>
+  `;
 }
 
 function renderCategoryBreakdown(words) {
@@ -762,7 +812,7 @@ function renderStats() {
   document.getElementById('s-learned').textContent = words.filter(w => SRS.isMastered(w)).length;
   document.getElementById('s-due').textContent = words.filter(w => SRS.isDue(w)).length;
   document.getElementById('s-streak').textContent = computeStreak(state.studyLog || {});
-  renderActivityChart(state.studyLog || {});
+  renderActivityHeatmap(state.studyLog || {});
   renderCategoryBreakdown(words);
 }
 
