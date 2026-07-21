@@ -297,6 +297,22 @@ body {
   font-style: italic;
 }
 
+/* ===================== Speak button (озвучка) ===================== */
+.speak-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 15px;
+  padding: 3px 6px;
+  margin-left: 6px;
+  border-radius: 999px;
+  color: var(--text-faint);
+  vertical-align: middle;
+  line-height: 1;
+}
+.speak-btn:hover { background: var(--surface-2); color: var(--accent); }
+.no-kr-voice .speak-btn { display: none; }
+
 .empty-state {
   text-align: center;
   padding: 60px 20px;

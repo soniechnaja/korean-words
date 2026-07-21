@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>내 단어장 — мой корейский словарь</title>
 <!-- bump ?v= below on every deploy so browsers don't serve stale cached files -->
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 
@@ -122,8 +122,17 @@
             </div>
           </div>
 
+          <div class="session-size">
+            <span>Направление:</span>
+            <div class="segmented" id="session-direction">
+              <button data-dir="kr-ru" class="active">한 → рус</button>
+              <button data-dir="ru-kr">рус → 한</button>
+              <button data-dir="mixed">Вперемешку</button>
+            </div>
+          </div>
+
           <button class="btn btn-primary btn-lg" id="btn-start-study">▶ Начать</button>
-          <p class="hint-text">1 — карточка · 2 — выбор перевода · 3 — вставить слово в предложение. Каждое слово начинает с 1-го уровня и поднимается, когда ты отвечаешь верно два раза подряд.</p>
+          <p class="hint-text">1 — карточка · 2 — выбор перевода · 3 — вставить слово в предложение. Каждое слово начинает с 1-го уровня и поднимается, когда ты отвечаешь верно два раза подряд. Направление «рус → 한» работает для уровней 1 и 2 — на уровне 3 всегда нужно вставить именно корейское слово в предложение.</p>
         </div>
 
         <div id="study-session" class="study-session" hidden>
@@ -356,8 +365,8 @@
 
 <div class="toast" id="toast" hidden></div>
 
-<script src="storage.js?v=2"></script>
-<script src="srs.js?v=2"></script>
-<script src="app.js?v=2"></script>
+<script src="storage.js?v=3"></script>
+<script src="srs.js?v=3"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>

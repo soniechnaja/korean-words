@@ -6,6 +6,7 @@
 
 let dictState = { searchTerm: '', activeCategory: null, sortMode: 'new' };
 let sessionSizeLimit = 10;
+let sessionDirection = 'kr-ru'; // 'kr-ru' | 'ru-kr' | 'mixed'
 let studySession = null; // { queue, index, correct, reviewed }
 let writingSession = null; // { category, words }
 let currentEditId = null;
@@ -46,6 +47,45 @@ function showToast(msg) {
   toast.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { toast.hidden = true; }, 2400);
+}
+
+// ---------- text-to-speech (произношение корейских слов) ----------
+
+function pickKoreanVoice() {
+  if (!('speechSynthesis' in window)) return null;
+  const voices = window.speechSynthesis.getVoices();
+  return voices.find(v => v.lang === 'ko-KR') || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('ko')) || null;
+}
+
+// Голоса в некоторых браузерах (Chrome) подгружаются асинхронно, поэтому
+// проверяем сразу и повторно по событию voiceschanged — до этого прячем кнопки,
+// чтобы не показывать 🔊, который ничего не сделает.
+function initSpeech() {
+  if (!('speechSynthesis' in window)) {
+    document.body.classList.add('no-kr-voice');
+    return;
+  }
+  const refresh = () => {
+    document.body.classList.toggle('no-kr-voice', !pickKoreanVoice());
+  };
+  document.body.classList.add('no-kr-voice');
+  refresh();
+  window.speechSynthesis.addEventListener('voiceschanged', refresh);
+}
+
+function speakKorean(text) {
+  if (!('speechSynthesis' in window) || !text) return;
+  const voice = pickKoreanVoice();
+  if (!voice) return;
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.voice = voice;
+  utter.lang = voice.lang;
+  window.speechSynthesis.speak(utter);
+}
+
+function speakBtnHtml(korean) {
+  return `<button type="button" class="speak-btn" data-speak="${esc(korean)}" title="Прослушать произношение" aria-label="Прослушать произношение">🔊</button>`;
 }
 
 // ---------- navigation ----------
@@ -127,7 +167,7 @@ function renderWordCard(w) {
     <div class="word-card" data-id="${w.id}">
       <div class="word-card-top">
         <div>
-          <div class="word-kr">${esc(w.korean)}</div>
+          <div class="word-kr">${esc(w.korean)}${speakBtnHtml(w.korean)}</div>
           ${w.transcription ? `<div class="word-tr">${esc(w.transcription)}</div>` : ''}
         </div>
         <span class="word-level ${badge.mastered ? 'mastered' : ''}">${badge.label}</span>
@@ -164,7 +204,8 @@ function renderDictionary() {
   } else {
     list.innerHTML = filtered.map(renderWordCard).join('');
     list.querySelectorAll('.word-card').forEach(card => {
-      card.addEventListener('click', () => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.speak-btn')) return;
         const word = Storage.getWords().find(w => w.id === card.dataset.id);
         if (word) openWordModal(word);
       });
@@ -375,24 +416,32 @@ function renderCurrentCard() {
   const word = studySession.queue[studySession.index];
   const allWords = Storage.getWords();
   const mode = pickCardMode(word, allWords);
+  const direction = sessionDirection === 'mixed' ? (Math.random() < 0.5 ? 'kr-ru' : 'ru-kr') : sessionDirection;
+  const reverse = direction === 'ru-kr';
   const stageTag = word.srs.stage >= 4 ? 'готово к письму' : `уровень ${Math.min(word.srs.stage, 3)}`;
   const stage = document.getElementById('card-stage');
 
   if (mode === 'flash') {
+    const frontHtml = reverse
+      ? `<div class="kr-word" style="font-size:26px;">${esc(word.translation)}</div>`
+      : `<div class="kr-word">${esc(word.korean)}${speakBtnHtml(word.korean)}</div>${word.transcription ? `<div class="kr-trans">${esc(word.transcription)}</div>` : ''}`;
+
     stage.innerHTML = `
       <div class="flashcard">
         <div class="card-category">${esc(stageTag)}${word.category ? ' · ' + esc(word.category) : ''}</div>
-        <div class="kr-word">${esc(word.korean)}</div>
-        ${word.transcription ? `<div class="kr-trans">${esc(word.transcription)}</div>` : ''}
+        ${frontHtml}
         <div id="card-answer-area">
-          <button class="btn btn-ghost reveal-btn" id="btn-reveal">Показать перевод</button>
+          <button class="btn btn-ghost reveal-btn" id="btn-reveal">${reverse ? 'Показать слово' : 'Показать перевод'}</button>
         </div>
       </div>
     `;
     document.getElementById('btn-reveal').addEventListener('click', () => {
+      const answerHtml = reverse
+        ? `<div class="card-translation">${esc(word.korean)}${speakBtnHtml(word.korean)}</div>${word.transcription ? `<div class="kr-trans">${esc(word.transcription)}</div>` : ''}`
+        : `<div class="card-translation">${esc(word.translation)}</div>`;
       document.getElementById('card-answer-area').innerHTML = `
         <div class="card-answer">
-          <div class="card-translation">${esc(word.translation)}</div>
+          ${answerHtml}
           ${word.examples && word.examples[0] ? `<div class="card-example">${esc(word.examples[0])}</div>` : ''}
           ${word.notes ? `<div class="card-notes">${esc(word.notes)}</div>` : ''}
         </div>
@@ -408,16 +457,18 @@ function renderCurrentCard() {
       });
     });
   } else if (mode === 'quiz') {
-    const otherTranslations = shuffle([...new Set(
-      allWords.filter(w => w.id !== word.id && w.translation !== word.translation).map(w => w.translation)
-    )]).slice(0, 3);
-    const options = shuffle([word.translation, ...otherTranslations]);
+    const distractorPool = allWords.filter(w => w.id !== word.id && w.translation !== word.translation);
+    const correctOption = reverse ? word.korean : word.translation;
+    const otherOptions = shuffle([...new Set(distractorPool.map(w => reverse ? w.korean : w.translation))]).slice(0, 3);
+    const options = shuffle([correctOption, ...otherOptions]);
+    const promptHtml = reverse
+      ? `<div class="kr-trans" style="font-size:16px;">${esc(word.translation)}</div>`
+      : `<div class="kr-word">${esc(word.korean)}${speakBtnHtml(word.korean)}</div>${word.transcription ? `<div class="kr-trans">${esc(word.transcription)}</div>` : ''}`;
 
     stage.innerHTML = `
       <div class="flashcard">
         <div class="card-category">${esc(stageTag)}${word.category ? ' · ' + esc(word.category) : ''}</div>
-        <div class="kr-word">${esc(word.korean)}</div>
-        ${word.transcription ? `<div class="kr-trans">${esc(word.transcription)}</div>` : ''}
+        ${promptHtml}
         <div class="quiz-options">
           ${options.map(opt => `<button class="quiz-option" data-opt="${esc(opt)}">${esc(opt)}</button>`).join('')}
         </div>
@@ -429,13 +480,15 @@ function renderCurrentCard() {
     optionButtons.forEach(btn => {
       btn.addEventListener('click', () => {
         optionButtons.forEach(b => b.disabled = true);
-        const isCorrect = btn.dataset.opt === word.translation;
+        const isCorrect = btn.dataset.opt === correctOption;
         btn.classList.add(isCorrect ? 'correct' : 'wrong');
         if (!isCorrect) {
-          optionButtons.forEach(b => { if (b.dataset.opt === word.translation) b.classList.add('correct'); });
+          optionButtons.forEach(b => { if (b.dataset.opt === correctOption) b.classList.add('correct'); });
         }
         const feedback = document.getElementById('quiz-feedback');
-        feedback.textContent = isCorrect ? 'Верно! ✓' : `Неверно — правильно: ${word.translation}`;
+        feedback.innerHTML = isCorrect
+          ? `Верно! ✓${reverse ? speakBtnHtml(correctOption) : ''}`
+          : `Неверно — правильно: ${esc(correctOption)}${reverse ? speakBtnHtml(correctOption) : ''}`;
         feedback.classList.add(isCorrect ? 'correct' : 'wrong');
         setTimeout(() => gradeCurrent(isCorrect ? 'good' : 'again'), 900);
       });
@@ -472,7 +525,9 @@ function renderCurrentCard() {
           optionButtons.forEach(b => { if (b.dataset.opt === word.korean) b.classList.add('correct'); });
         }
         const feedback = document.getElementById('quiz-feedback');
-        feedback.textContent = isCorrect ? 'Верно! ✓' : `Неверно — правильно: ${word.korean}`;
+        feedback.innerHTML = isCorrect
+          ? `Верно! ✓${speakBtnHtml(word.korean)}`
+          : `Неверно — правильно: ${esc(word.korean)}${speakBtnHtml(word.korean)}`;
         feedback.classList.add(isCorrect ? 'correct' : 'wrong');
         setTimeout(() => gradeCurrent(isCorrect ? 'good' : 'again'), 900);
       });
@@ -994,6 +1049,18 @@ function wireEvents() {
       sessionSizeLimit = parseInt(btn.dataset.size, 10);
     });
   });
+  document.getElementById('session-direction').querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#session-direction button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      sessionDirection = btn.dataset.dir;
+    });
+  });
+
+  document.addEventListener('click', e => {
+    const speakBtn = e.target.closest('.speak-btn');
+    if (speakBtn) speakKorean(speakBtn.dataset.speak);
+  });
   document.getElementById('btn-start-study').addEventListener('click', startStudySession);
   document.getElementById('btn-study-again').addEventListener('click', () => {
     document.getElementById('study-summary').hidden = true;
@@ -1025,6 +1092,7 @@ function wireEvents() {
 // ---------- init ----------
 
 initTheme();
+initSpeech();
 wireEvents();
 switchView('dictionary');
 
