@@ -281,15 +281,15 @@ body {
 }
 .word-level.mastered { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }
 .word-translation { margin-top: 8px; font-size: 14.5px; }
-.word-category {
+.word-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.word-category, .word-type {
   display: inline-block;
-  margin-top: 10px;
   font-size: 11.5px;
-  color: var(--accent);
-  background: var(--accent-soft);
   padding: 2px 9px;
   border-radius: 999px;
 }
+.word-category { color: var(--accent); background: var(--accent-soft); }
+.word-type { color: var(--text-muted); background: var(--surface-2); border: 1px solid var(--border); }
 .word-example {
   margin-top: 8px;
   font-size: 12.5px;

@@ -4,7 +4,7 @@
 // Уровень 4 (письмо) обращается к Claude API напрямую из браузера.
 // ============================================================
 
-let dictState = { searchTerm: '', activeCategory: null, sortMode: 'new' };
+let dictState = { searchTerm: '', activeCategory: null, activeType: null, sortMode: 'new' };
 let sessionSizeLimit = 10;
 let sessionDirection = 'kr-ru'; // 'kr-ru' | 'ru-kr' | 'mixed'
 let studySession = null; // { queue, index, correct, reviewed }
@@ -134,7 +134,7 @@ function toggleTheme() {
 function matchesSearch(w, term) {
   if (!term) return true;
   const t = term.toLowerCase();
-  return [w.korean, w.translation, w.transcription, w.category, w.notes, ...(w.examples || [])]
+  return [w.korean, w.translation, w.transcription, w.category, w.wordType, w.notes, ...(w.examples || [])]
     .some(f => (f || '').toLowerCase().includes(t));
 }
 
@@ -149,6 +149,22 @@ function renderCategoryChips(words) {
   wrap.querySelectorAll('.chip').forEach(btn => {
     btn.addEventListener('click', () => {
       dictState.activeCategory = btn.dataset.cat || null;
+      renderDictionary();
+    });
+  });
+}
+
+function renderTypeChips(words) {
+  const types = [...new Set(words.map(w => w.wordType).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
+  const wrap = document.getElementById('type-chips');
+  if (types.length === 0) { wrap.innerHTML = ''; return; }
+  const chips = [{ label: 'Все типы', value: null }, ...types.map(t => ({ label: t, value: t }))];
+  wrap.innerHTML = chips.map(c =>
+    `<button class="chip ${dictState.activeType === c.value ? 'active' : ''}" data-type="${esc(c.value || '')}">${esc(c.label)}</button>`
+  ).join('');
+  wrap.querySelectorAll('.chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      dictState.activeType = btn.dataset.type || null;
       renderDictionary();
     });
   });
@@ -173,7 +189,10 @@ function renderWordCard(w) {
         <span class="word-level ${badge.mastered ? 'mastered' : ''}">${badge.label}</span>
       </div>
       <div class="word-translation">${esc(w.translation)}</div>
-      ${w.category ? `<span class="word-category">${esc(w.category)}</span>` : ''}
+      <div class="word-tags">
+        ${w.category ? `<span class="word-category">${esc(w.category)}</span>` : ''}
+        ${w.wordType ? `<span class="word-type">${esc(w.wordType)}</span>` : ''}
+      </div>
       ${firstExample ? `<div class="word-example">${esc(firstExample)}</div>` : ''}
     </div>
   `;
@@ -186,8 +205,11 @@ function renderDictionary() {
   document.getElementById('empty-state').hidden = all.length !== 0;
 
   renderCategoryChips(all);
+  renderTypeChips(all);
 
-  let filtered = all.filter(w => matchesSearch(w, dictState.searchTerm) && (!dictState.activeCategory || w.category === dictState.activeCategory));
+  let filtered = all.filter(w => matchesSearch(w, dictState.searchTerm)
+    && (!dictState.activeCategory || w.category === dictState.activeCategory)
+    && (!dictState.activeType || w.wordType === dictState.activeType));
 
   switch (dictState.sortMode) {
     case 'old': filtered.sort((a, b) => a.createdAt - b.createdAt); break;
@@ -230,6 +252,7 @@ function openWordModal(word) {
   document.getElementById('f-translation').value = word ? word.translation : '';
   document.getElementById('f-transcription').value = word ? word.transcription : '';
   document.getElementById('f-category').value = word ? word.category : '';
+  document.getElementById('f-word-type').value = word ? (word.wordType || '') : '';
   document.getElementById('f-examples').value = word ? (word.examples || []).join('\n') : '';
   document.getElementById('f-notes').value = word ? word.notes : '';
   document.getElementById('btn-delete-word').hidden = !word;
@@ -251,6 +274,7 @@ function handleWordFormSubmit(e) {
     translation: document.getElementById('f-translation').value,
     transcription: document.getElementById('f-transcription').value,
     category: document.getElementById('f-category').value,
+    wordType: document.getElementById('f-word-type').value,
     examples: document.getElementById('f-examples').value.split('\n').map(s => s.trim()).filter(Boolean),
     notes: document.getElementById('f-notes').value,
   };

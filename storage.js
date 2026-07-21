@@ -21,6 +21,7 @@ function migrateWord(w) {
   return {
     ...w,
     examples,
+    wordType: w.wordType || '',
     updatedAt: w.updatedAt || w.createdAt || Date.now(),
     srs: {
       level: 0,
@@ -89,6 +90,7 @@ const Storage = {
       translation: word.translation.trim(),
       transcription: (word.transcription || '').trim(),
       category: (word.category || '').trim(),
+      wordType: (word.wordType || '').trim(),
       examples: Array.isArray(word.examples) ? word.examples.filter(Boolean) : (word.example ? [word.example] : []),
       notes: (word.notes || '').trim(),
       createdAt: now,

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>내 단어장 — мой корейский словарь</title>
 <!-- bump ?v= below on every deploy so browsers don't serve stale cached files -->
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 
@@ -72,6 +72,7 @@
       </div>
 
       <div class="chips" id="category-chips"></div>
+      <div class="chips" id="type-chips"></div>
 
       <div class="word-list" id="word-list"></div>
 
@@ -320,6 +321,23 @@
         <datalist id="category-list"></datalist>
       </label>
       <label class="field">
+        <span>Тип (грамматика)</span>
+        <select id="f-word-type">
+          <option value="">—</option>
+          <option value="Существительное">Существительное</option>
+          <option value="Глагол">Глагол</option>
+          <option value="Прилагательное">Прилагательное</option>
+          <option value="Наречие">Наречие</option>
+          <option value="Частица">Частица</option>
+          <option value="Местоимение">Местоимение</option>
+          <option value="Числительное">Числительное</option>
+          <option value="Союз">Союз</option>
+          <option value="Междометие">Междометие</option>
+          <option value="Устойчивое выражение">Устойчивое выражение</option>
+          <option value="Другое">Другое</option>
+        </select>
+      </label>
+      <label class="field">
         <span>Примеры (по одному предложению на строке)</span>
         <textarea id="f-examples" rows="3" placeholder="사랑해요 — я люблю тебя"></textarea>
       </label>
@@ -365,8 +383,8 @@
 
 <div class="toast" id="toast" hidden></div>
 
-<script src="storage.js?v=4"></script>
-<script src="srs.js?v=4"></script>
-<script src="app.js?v=4"></script>
+<script src="storage.js?v=5"></script>
+<script src="srs.js?v=5"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>
