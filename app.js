@@ -244,6 +244,39 @@ function fillCategoryDatalist() {
   document.getElementById('category-list').innerHTML = categories.map(c => `<option value="${esc(c)}">`).join('');
 }
 
+const RELATION_LABELS = { synonym: 'Синоним', antonym: 'Антоним', similar: 'Похоже по форме' };
+
+function renderRelatedList(word) {
+  const wrap = document.getElementById('related-list');
+  const related = word.related || [];
+  if (related.length === 0) {
+    wrap.innerHTML = '<p class="hint-text" style="margin:0 0 10px;">Пока нет связанных слов.</p>';
+    return;
+  }
+  const allWords = Storage.getWords();
+  wrap.innerHTML = related.map(r => {
+    const target = allWords.find(w => w.id === r.id);
+    if (!target) return '';
+    return `
+      <div class="related-row">
+        <span class="related-tag">${esc(RELATION_LABELS[r.relation] || r.relation)}</span>
+        <button type="button" class="related-link" data-jump="${target.id}">${esc(target.korean)} — ${esc(target.translation)}</button>
+        <button type="button" class="related-remove" data-unlink="${target.id}" title="Убрать связь">✕</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function fillRelatedWordSelect(word) {
+  const sel = document.getElementById('f-related-word');
+  const linkedIds = new Set((word.related || []).map(r => r.id));
+  const options = Storage.getWords()
+    .filter(w => w.id !== word.id && !linkedIds.has(w.id))
+    .sort((a, b) => a.korean.localeCompare(b.korean, 'ko'))
+    .map(w => `<option value="${w.id}">${esc(w.korean)} — ${esc(w.translation)}</option>`);
+  sel.innerHTML = options.length ? options.join('') : '<option value="">Нет доступных слов</option>';
+}
+
 function openWordModal(word) {
   currentEditId = word ? word.id : null;
   document.getElementById('word-modal-title').textContent = word ? 'Редактировать слово' : 'Новое слово';
@@ -256,6 +289,13 @@ function openWordModal(word) {
   document.getElementById('f-examples').value = word ? (word.examples || []).join('\n') : '';
   document.getElementById('f-notes').value = word ? word.notes : '';
   document.getElementById('btn-delete-word').hidden = !word;
+
+  document.getElementById('related-field').hidden = !word;
+  if (word) {
+    renderRelatedList(word);
+    fillRelatedWordSelect(word);
+  }
+
   fillCategoryDatalist();
   document.getElementById('word-modal-overlay').hidden = false;
   document.getElementById('f-korean').focus();
@@ -1102,6 +1142,32 @@ function wireEvents() {
   document.getElementById('word-modal-overlay').addEventListener('click', e => {
     if (e.target.id === 'word-modal-overlay') closeWordModal();
   });
+
+  document.getElementById('related-list').addEventListener('click', e => {
+    const jumpBtn = e.target.closest('.related-link');
+    if (jumpBtn) {
+      const target = Storage.getWords().find(w => w.id === jumpBtn.dataset.jump);
+      if (target) openWordModal(target);
+      return;
+    }
+    const removeBtn = e.target.closest('.related-remove');
+    if (removeBtn && currentEditId) {
+      Storage.removeRelation(currentEditId, removeBtn.dataset.unlink);
+      const updated = Storage.getWords().find(w => w.id === currentEditId);
+      renderRelatedList(updated);
+      fillRelatedWordSelect(updated);
+    }
+  });
+  document.getElementById('btn-add-related').addEventListener('click', () => {
+    const targetId = document.getElementById('f-related-word').value;
+    const relation = document.getElementById('f-related-relation').value;
+    if (!targetId || !currentEditId) return;
+    Storage.addRelation(currentEditId, targetId, relation);
+    const updated = Storage.getWords().find(w => w.id === currentEditId);
+    renderRelatedList(updated);
+    fillRelatedWordSelect(updated);
+  });
+
 
   document.getElementById('btn-bulk-add').addEventListener('click', openBulkModal);
   document.getElementById('bulk-modal-close').addEventListener('click', closeBulkModal);

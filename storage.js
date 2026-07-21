@@ -22,6 +22,7 @@ function migrateWord(w) {
     ...w,
     examples,
     wordType: w.wordType || '',
+    related: Array.isArray(w.related) ? w.related : [],
     updatedAt: w.updatedAt || w.createdAt || Date.now(),
     srs: {
       level: 0,
@@ -95,6 +96,7 @@ const Storage = {
       notes: (word.notes || '').trim(),
       createdAt: now,
       updatedAt: now,
+      related: [],
       srs: { level: 0, dueDate: now, lastReviewed: null, totalReviews: 0, totalCorrect: 0, stage: 1, stageStreak: 0 }
     };
     words.push(entry);
@@ -115,6 +117,42 @@ const Storage = {
 
   deleteWord(id) {
     const words = this.getWords().filter(w => w.id !== id);
+    // Убираем висячие ссылки на удалённое слово из чужих списков связанных слов.
+    words.forEach(w => {
+      if ((w.related || []).some(r => r.id === id)) {
+        w.related = w.related.filter(r => r.id !== id);
+        w.updatedAt = Date.now();
+      }
+    });
+    this.saveWords(words);
+    this.noteChange(1);
+  },
+
+  // Связи симметричны (синоним/антоним/похоже по форме — отношение верно в обе
+  // стороны), поэтому храним запись у обоих слов сразу.
+  addRelation(idA, idB, relation) {
+    if (idA === idB) return;
+    const words = this.getWords();
+    const a = words.find(w => w.id === idA);
+    const b = words.find(w => w.id === idB);
+    if (!a || !b) return;
+    const link = (word, otherId) => {
+      word.related = (word.related || []).filter(r => r.id !== otherId);
+      word.related.push({ id: otherId, relation });
+      word.updatedAt = Date.now();
+    };
+    link(a, idB);
+    link(b, idA);
+    this.saveWords(words);
+    this.noteChange(1);
+  },
+
+  removeRelation(idA, idB) {
+    const words = this.getWords();
+    const a = words.find(w => w.id === idA);
+    const b = words.find(w => w.id === idB);
+    if (a) { a.related = (a.related || []).filter(r => r.id !== idB); a.updatedAt = Date.now(); }
+    if (b) { b.related = (b.related || []).filter(r => r.id !== idA); b.updatedAt = Date.now(); }
     this.saveWords(words);
     this.noteChange(1);
   },

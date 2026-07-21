@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>내 단어장 — мой корейский словарь</title>
 <!-- bump ?v= below on every deploy so browsers don't serve stale cached files -->
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 
@@ -345,6 +345,21 @@
         <span>Заметка</span>
         <textarea id="f-notes" rows="2" placeholder="любые свои пометки"></textarea>
       </label>
+
+      <div class="field related-field" id="related-field" hidden>
+        <span>Связанные слова</span>
+        <div id="related-list" class="related-list"></div>
+        <div class="related-add-row">
+          <select id="f-related-relation" class="select">
+            <option value="synonym">Синоним</option>
+            <option value="antonym">Антоним</option>
+            <option value="similar">Похоже по форме</option>
+          </select>
+          <select id="f-related-word" class="select"></select>
+          <button type="button" class="btn btn-ghost" id="btn-add-related">Добавить</button>
+        </div>
+      </div>
+
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" id="btn-delete-word" hidden>Удалить</button>
         <div class="modal-actions-right">
@@ -383,8 +398,8 @@
 
 <div class="toast" id="toast" hidden></div>
 
-<script src="storage.js?v=5"></script>
-<script src="srs.js?v=5"></script>
-<script src="app.js?v=5"></script>
+<script src="storage.js?v=6"></script>
+<script src="srs.js?v=6"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
