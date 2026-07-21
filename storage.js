@@ -21,6 +21,7 @@ function migrateWord(w) {
   return {
     ...w,
     examples,
+    updatedAt: w.updatedAt || w.createdAt || Date.now(),
     srs: {
       level: 0,
       dueDate: Date.now(),
@@ -32,6 +33,35 @@ function migrateWord(w) {
       ...w.srs,
     },
   };
+}
+
+// Слияние слов с другого устройства с локальными: по каждому id оставляем ту
+// версию, что менялась позже (updatedAt), а не заменяем весь список целиком —
+// иначе слово, добавленное здесь прямо перед синхронизацией, могло бы потеряться.
+// remoteWasStale = true, если в облаке не хватало чего-то, что есть только тут.
+function mergeWordLists(localWords, remoteWords) {
+  const map = new Map(remoteWords.map(w => [w.id, w]));
+  let remoteWasStale = false;
+
+  localWords.forEach(w => {
+    const remote = map.get(w.id);
+    if (!remote || (w.updatedAt || 0) > (remote.updatedAt || 0)) {
+      map.set(w.id, w);
+      remoteWasStale = true;
+    }
+  });
+
+  return { merged: [...map.values()], remoteWasStale };
+}
+
+// Активность за день берём как максимум из двух устройств, а не перезаписываем —
+// иначе счётчик за сегодняшний день на одном устройстве мог стереть счётчик с другого.
+function mergeStudyLogs(a, b) {
+  const merged = { ...a };
+  Object.keys(b).forEach(day => {
+    merged[day] = Math.max(merged[day] || 0, b[day] || 0);
+  });
+  return merged;
 }
 
 const Storage = {
@@ -62,6 +92,7 @@ const Storage = {
       examples: Array.isArray(word.examples) ? word.examples.filter(Boolean) : (word.example ? [word.example] : []),
       notes: (word.notes || '').trim(),
       createdAt: now,
+      updatedAt: now,
       srs: { level: 0, dueDate: now, lastReviewed: null, totalReviews: 0, totalCorrect: 0, stage: 1, stageStreak: 0 }
     };
     words.push(entry);
@@ -74,7 +105,7 @@ const Storage = {
     const words = this.getWords();
     const idx = words.findIndex(w => w.id === id);
     if (idx === -1) return null;
-    words[idx] = { ...words[idx], ...patch };
+    words[idx] = { ...words[idx], ...patch, updatedAt: Date.now() };
     this.saveWords(words);
     this.noteChange(1);
     return words[idx];
@@ -146,7 +177,11 @@ const Storage = {
   },
 
   exportJSON() {
-    return JSON.stringify({ words: this.getWords(), state: this.getState(), exportedAt: new Date().toISOString() }, null, 2);
+    // В файл экспорта не кладём секреты (ключ Claude, токен GitHub) — они
+    // остаются только в этом браузере и не нужны для восстановления слов.
+    const state = this.getState();
+    const safeState = { ...state, apiKey: '', github: { ...state.github, token: '' } };
+    return JSON.stringify({ words: this.getWords(), state: safeState, exportedAt: new Date().toISOString() }, null, 2);
   },
 
   // То, что реально синхронизируется между устройствами через GitHub —
@@ -160,12 +195,19 @@ const Storage = {
     };
   },
 
+  // Возвращает remoteWasStale — было ли в облаке что-то устаревшее по сравнению
+  // с этим устройством (тогда вызывающий код должен отправить слияние обратно).
   applySyncPayload(payload) {
-    this.saveWords((payload.words || []).map(migrateWord));
+    const remoteWords = (payload.words || []).map(migrateWord);
+    const { merged, remoteWasStale } = mergeWordLists(this.getWords(), remoteWords);
+    this.saveWords(merged);
+
     const state = this.getState();
-    state.studyLog = payload.studyLog || {};
-    state.dataUpdatedAt = payload.savedAt || Date.now();
+    state.studyLog = mergeStudyLogs(state.studyLog || {}, payload.studyLog || {});
+    state.dataUpdatedAt = Date.now();
     this.saveState(state);
+
+    return { remoteWasStale };
   },
 
   importJSON(json, mode) {

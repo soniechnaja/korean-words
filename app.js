@@ -818,8 +818,10 @@ async function pushToGithub(manual, knownMissing) {
   }
 }
 
-// При открытии сайта — подтягиваем более свежую версию (по timestamp),
-// либо, если локальная новее (или в облаке пока пусто), заливаем её наверх.
+// При открытии сайта — подтягиваем данные с другого устройства и СЛИВАЕМ их со
+// своими по каждому слову (у кого правка новее), а не заменяем всё целиком.
+// Так свежедобавленное слово не потеряется, даже если в облаке в этот момент
+// лежит более новая правка какого-то другого слова.
 async function pullFromGithub(manual) {
   const state = Storage.getState();
   const gh = state.github;
@@ -833,27 +835,20 @@ async function pullFromGithub(manual) {
       await pushToGithub(manual, true);
       return;
     }
-    const localUpdatedAt = Storage.getState().dataUpdatedAt || 0;
-    const remoteSavedAt = remote.content.savedAt || 0;
 
-    if (remoteSavedAt > localUpdatedAt) {
-      Storage.applySyncPayload(remote.content);
-      const s = Storage.getState();
-      s.github.sha = remote.sha;
-      s.github.lastSyncAt = Date.now();
-      Storage.saveState(s);
-      renderDictionary();
-      updateStudyIntro();
-      renderStats();
-      if (manual) showToast('Загружены свежие данные с другого устройства');
-    } else if (remoteSavedAt < localUpdatedAt) {
+    const { remoteWasStale } = Storage.applySyncPayload(remote.content);
+    const s = Storage.getState();
+    s.github.sha = remote.sha;
+    s.github.lastSyncAt = Date.now();
+    Storage.saveState(s);
+    renderDictionary();
+    updateStudyIntro();
+    renderStats();
+
+    if (remoteWasStale) {
       await pushToGithub(manual);
-    } else {
-      const s = Storage.getState();
-      s.github.sha = remote.sha;
-      s.github.lastSyncAt = Date.now();
-      Storage.saveState(s);
-      if (manual) showToast('Уже синхронизировано');
+    } else if (manual) {
+      showToast('Синхронизировано ✓');
     }
     renderDataView();
   } catch (err) {
