@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>내 단어장 — мой корейский словарь</title>
 <!-- bump ?v= below on every deploy so browsers don't serve stale cached files -->
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 
@@ -252,7 +252,7 @@
 
       <div class="panel">
         <h3>Синхронизация между устройствами</h3>
-        <p class="hint-text">Слова хранятся в твоём приватном репозитории на GitHub и подтягиваются на любом устройстве, где ты откроешь этот сайт с теми же настройками. Как создать токен и репозиторий — см. инструкцию, которую я тебе прислала.</p>
+        <p class="hint-text">Слова хранятся в твоём приватном репозитории на GitHub и подтягиваются на любом устройстве, где ты откроешь этот сайт с теми же настройками. Как создать токен и репозиторий — см. инструкцию, которую я тебе прислала. Автоматическая отправка происходит раз в сутки (и при уходе со страницы, если есть несохранённые изменения) — не после каждой правки, чтобы не плодить лишние коммиты. Если нужно прямо сейчас — жми «Сохранить и синхронизировать».</p>
         <label class="field">
           <span>Владелец репозитория (твой логин на GitHub)</span>
           <input type="text" id="f-gh-owner" placeholder="username">
@@ -398,8 +398,8 @@
 
 <div class="toast" id="toast" hidden></div>
 
-<script src="storage.js?v=6"></script>
-<script src="srs.js?v=6"></script>
-<script src="app.js?v=6"></script>
+<script src="storage.js?v=7"></script>
+<script src="srs.js?v=7"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>

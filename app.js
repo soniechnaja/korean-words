@@ -11,11 +11,10 @@ let studySession = null; // { queue, index, correct, reviewed }
 let writingSession = null; // { category, words }
 let currentEditId = null;
 let toastTimer = null;
-let syncPushTimer = null;
 
 const CLAUDE_MODEL = 'claude-haiku-4-5';
 const BACKUP_REMINDER_THRESHOLD = 8;
-const SYNC_PUSH_DELAY_MS = 2500;
+const AUTO_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 // ---------- helpers ----------
 
@@ -329,7 +328,6 @@ function handleWordFormSubmit(e) {
   }
   closeWordModal();
   renderDictionary();
-  scheduleSyncPush();
 }
 
 function handleDeleteWord() {
@@ -339,7 +337,6 @@ function handleDeleteWord() {
   closeWordModal();
   renderDictionary();
   showToast('Слово удалено');
-  scheduleSyncPush();
 }
 
 // ---------- bulk add ----------
@@ -383,7 +380,6 @@ function handleBulkSubmit() {
   closeBulkModal();
   renderDictionary();
   showToast(`Добавлено слов: ${parsed.length}`);
-  scheduleSyncPush();
 }
 
 // ---------- study: mode switch (Слова / Письмо) ----------
@@ -620,7 +616,6 @@ function finishSession() {
   document.getElementById('summary-correct').textContent = studySession.correct;
   document.getElementById('summary-total').textContent = studySession.reviewed;
   refreshNavBadges();
-  scheduleSyncPush();
 }
 
 // ---------- study: writing (level 4, Claude-graded) ----------
@@ -745,7 +740,6 @@ async function handleWritingCheck() {
       <div>${esc(verdict.feedback)}</div>
       <div class="writing-result-corrected"><strong>Образец:</strong> ${esc(verdict.corrected)}</div>
     `;
-    scheduleSyncPush();
   } catch (err) {
     showToast(err.message || 'Не удалось проверить предложение');
   } finally {
@@ -936,7 +930,7 @@ async function githubFetchFile(gh) {
   return { sha: data.sha, content: JSON.parse(b64DecodeUtf8(data.content)) };
 }
 
-async function githubPutFile(gh, payload, sha) {
+async function githubPutFile(gh, payload, sha, opts) {
   const url = `https://api.github.com/repos/${gh.owner}/${gh.repo}/contents/${encodeURIComponent(gh.path)}`;
   const body = {
     message: `sync: ${new Date().toISOString()}`,
@@ -951,6 +945,7 @@ async function githubPutFile(gh, payload, sha) {
       'content-type': 'application/json',
     },
     body: JSON.stringify(body),
+    ...(opts && opts.keepalive ? { keepalive: true } : {}),
   });
   if (!resp.ok) {
     const errBody = await resp.text().catch(() => '');
@@ -960,7 +955,7 @@ async function githubPutFile(gh, payload, sha) {
   return data.content.sha;
 }
 
-async function pushToGithub(manual, knownMissing) {
+async function pushToGithub(manual, knownMissing, opts) {
   const state = Storage.getState();
   const gh = state.github;
   if (!ghConfigured(gh)) {
@@ -974,7 +969,7 @@ async function pushToGithub(manual, knownMissing) {
       sha = remote ? remote.sha : null;
     }
     const payload = Storage.getSyncPayload();
-    const newSha = await githubPutFile(gh, payload, sha);
+    const newSha = await githubPutFile(gh, payload, sha, opts);
     const s = Storage.getState();
     s.github.sha = newSha;
     s.github.lastSyncAt = Date.now();
@@ -983,7 +978,7 @@ async function pushToGithub(manual, knownMissing) {
     renderDataView();
   } catch (err) {
     console.warn('sync push failed', err);
-    showToast('Не получилось синхронизировать: ' + (err.message || 'ошибка'));
+    if (manual) showToast('Не получилось синхронизировать: ' + (err.message || 'ошибка'));
   }
 }
 
@@ -1026,11 +1021,36 @@ async function pullFromGithub(manual) {
   }
 }
 
-function scheduleSyncPush() {
+// Изменения уже отмечены через Storage.noteChange() (обновляет dataUpdatedAt) —
+// здесь просто сравниваем её с моментом последней успешной синхронизации.
+function hasPendingSyncChanges() {
+  const state = Storage.getState();
+  return (state.dataUpdatedAt || 0) > (state.github.lastSyncAt || 0);
+}
+
+// Не пушим в GitHub при каждой правке (иначе на каждое слово — отдельный
+// коммит и лишний вызов API) — копим изменения и отправляем раз в сутки.
+// Часовой таймер нужен на случай, если вкладка не закрывается днями.
+function maybeAutoSyncPush() {
   const gh = Storage.getState().github;
   if (!ghConfigured(gh)) return;
-  clearTimeout(syncPushTimer);
-  syncPushTimer = setTimeout(() => pushToGithub(false), SYNC_PUSH_DELAY_MS);
+  const dueForSync = Date.now() - (gh.lastSyncAt || 0) >= AUTO_SYNC_INTERVAL_MS;
+  if (dueForSync && hasPendingSyncChanges()) pushToGithub(false);
+}
+
+// При уходе со страницы (закрытие вкладки, сворачивание, переключение) —
+// подчищаем накопленные изменения, не дожидаясь суточного таймера.
+// keepalive позволяет запросу пережить закрытие вкладки (с ограничением ~64КБ
+// на тело запроса — для большого словаря может не сработать, но это не
+// страшно: несохранённое всё равно останется в localStorage и уйдёт в облако
+// при следующем открытии сайта или на следующий день по таймеру).
+let hideFlushDone = false;
+function flushPendingSyncOnHide() {
+  if (hideFlushDone) return;
+  const gh = Storage.getState().github;
+  if (!ghConfigured(gh) || !hasPendingSyncChanges()) return;
+  hideFlushDone = true;
+  pushToGithub(false, false, { keepalive: true });
 }
 
 function handleSyncSave() {
@@ -1085,7 +1105,6 @@ function handleImportFile(e) {
       updateStudyIntro();
       renderDataView();
       showToast(`Готово: ${result.added} слов ${result.mode === 'replace' ? 'загружено' : 'добавлено'}`);
-      scheduleSyncPush();
     } catch (err) {
       showToast('Не получилось прочитать файл — проверь формат JSON');
     }
@@ -1113,7 +1132,6 @@ function handleClearAll() {
   updateStudyIntro();
   renderDataView();
   showToast('База очищена');
-  scheduleSyncPush();
 }
 
 // ---------- wiring ----------
@@ -1242,4 +1260,15 @@ pullFromGithub(false).then(() => {
   renderDictionary();
   updateStudyIntro();
   renderStats();
+  maybeAutoSyncPush(); // на случай изменений из прошлой сессии, которые ещё не улетели в облако
 });
+
+// Раз в час перепроверяем, не пора ли (раз в сутки) отправить накопленные
+// изменения в GitHub — на случай, если вкладка держится открытой долго.
+setInterval(maybeAutoSyncPush, 60 * 60 * 1000);
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushPendingSyncOnHide();
+  else hideFlushDone = false;
+});
+window.addEventListener('pagehide', flushPendingSyncOnHide);
