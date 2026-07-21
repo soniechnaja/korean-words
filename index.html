@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="단어장">
 <!-- bump ?v= below on every deploy so browsers don't serve stale cached files -->
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
 
@@ -195,6 +195,30 @@
         </div>
       </header>
 
+      <div class="panel streak-panel">
+        <div class="streak-flower-wrap">
+          <svg id="streak-flower" class="streak-flower" viewBox="0 0 100 120" aria-hidden="true">
+            <ellipse cx="50" cy="104" rx="22" ry="4" class="fl-ground"></ellipse>
+            <path id="fl-leaf-l" class="fl-leaf" d="M50,82 C38,80 32,70 34,62 C44,66 50,74 50,82 Z"></path>
+            <path id="fl-leaf-r" class="fl-leaf" d="M50,88 C62,86 68,76 66,68 C56,72 50,80 50,88 Z"></path>
+            <path id="fl-stem" d="M50,100 L50,55" fill="none" stroke-width="4" stroke-linecap="round"></path>
+            <ellipse id="fl-bud" cx="0" cy="0" rx="6" ry="9"></ellipse>
+            <g id="fl-petals">
+              <path class="fl-petal" data-i="0" d="M0,0 C-6,-10 -6,-22 0,-28 C6,-22 6,-10 0,0 Z"></path>
+              <path class="fl-petal" data-i="1" d="M0,0 C-6,-10 -6,-22 0,-28 C6,-22 6,-10 0,0 Z"></path>
+              <path class="fl-petal" data-i="2" d="M0,0 C-6,-10 -6,-22 0,-28 C6,-22 6,-10 0,0 Z"></path>
+              <path class="fl-petal" data-i="3" d="M0,0 C-6,-10 -6,-22 0,-28 C6,-22 6,-10 0,0 Z"></path>
+              <path class="fl-petal" data-i="4" d="M0,0 C-6,-10 -6,-22 0,-28 C6,-22 6,-10 0,0 Z"></path>
+            </g>
+            <circle id="fl-center" cx="0" cy="0" r="5"></circle>
+          </svg>
+        </div>
+        <div class="streak-info">
+          <div class="streak-num" id="s-streak">0</div>
+          <div class="streak-label" id="streak-label">дней подряд</div>
+        </div>
+      </div>
+
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-card-num" id="s-total">0</div>
@@ -207,10 +231,6 @@
         <div class="stat-card">
           <div class="stat-card-num" id="s-due">0</div>
           <div class="stat-card-label">ждут повторения</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-card-num" id="s-streak">0</div>
-          <div class="stat-card-label">дней подряд</div>
         </div>
       </div>
 
@@ -405,8 +425,8 @@
 
 <div class="toast" id="toast" hidden></div>
 
-<script src="storage.js?v=8"></script>
-<script src="srs.js?v=8"></script>
-<script src="app.js?v=8"></script>
+<script src="storage.js?v=9"></script>
+<script src="srs.js?v=9"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>

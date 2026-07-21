@@ -761,6 +761,126 @@ function computeStreak(log) {
   return count;
 }
 
+// ---------- streak flower (SVG, без картинок) ----------
+
+const FLOWER_STAGE_COUNT = 5; // росток → бутон → полу-раскрытый → раскрытый → полный бутон
+const FLOWER_COLORS = ['#4a3aa7', '#d1477a', '#e08c2b', '#2a9d6b', '#2f7fd1'];
+const FLOWER_PETAL_SHAPES = [
+  'M0,0 C-6,-10 -6,-22 0,-28 C6,-22 6,-10 0,0 Z', // круглый лепесток
+  'M0,0 C-3,-14 -1,-24 0,-30 C1,-24 3,-14 0,0 Z', // узкий, тюльпан
+  'M0,0 C-8,-6 -9,-16 0,-20 C9,-16 8,-6 0,0 Z',   // короткий, ромашка
+];
+// Параметры бутона/лепестков/центра/листьев по стадии внутри одного уровня (0..4)
+const FLOWER_STAGE_PARAMS = [
+  { bud: 0.35, petalDist: 4, petalScale: 0, center: 0, leaf: 0.4 },
+  { bud: 1, petalDist: 4, petalScale: 0, center: 0, leaf: 1 },
+  { bud: 0, petalDist: 8, petalScale: 0.55, center: 0.3, leaf: 1 },
+  { bud: 0, petalDist: 11, petalScale: 0.85, center: 0.7, leaf: 1 },
+  { bud: 0, petalDist: 13, petalScale: 1, center: 1, leaf: 1 },
+];
+
+// Каждые FLOWER_STAGE_COUNT дней стрика — новый "уровень" (другой цвет и форма
+// лепестков), а стадия внутри уровня показывает рост день за днём.
+function flowerVisualFor(streak) {
+  const level = Math.floor((streak - 1) / FLOWER_STAGE_COUNT);
+  const stage = (streak - 1) % FLOWER_STAGE_COUNT;
+  return { level, stage };
+}
+
+function describeFlowerState(streak, hasHistory) {
+  if (streak <= 0) return hasHistory ? { wilted: true } : { seed: true };
+  return flowerVisualFor(streak);
+}
+
+// Устанавливает inline-стили элементов цветка. CSS-transition на самих
+// элементах анимирует переход, если до этого стояли другие значения —
+// поэтому эта функция не занимается анимацией сама, только конечным состоянием.
+function applyFlowerVisual(visual) {
+  const svg = document.getElementById('streak-flower');
+  const petals = [...svg.querySelectorAll('.fl-petal')];
+  const bud = document.getElementById('fl-bud');
+  const center = document.getElementById('fl-center');
+  const leaves = [...svg.querySelectorAll('.fl-leaf')];
+  const stem = document.getElementById('fl-stem');
+
+  svg.classList.toggle('full-bloom', !visual.wilted && !visual.seed && visual.stage === FLOWER_STAGE_COUNT - 1);
+
+  if (visual.seed) {
+    petals.forEach(p => { p.style.transform = 'translate(50px,42px) scale(0)'; p.style.opacity = '0'; });
+    bud.style.transform = 'translate(50px,46px) scale(0.15)';
+    bud.style.opacity = '0.5';
+    bud.style.fill = 'var(--baseline)';
+    center.style.transform = 'translate(50px,42px) scale(0)';
+    center.style.opacity = '0';
+    leaves.forEach(l => { l.style.opacity = '0'; });
+    stem.style.stroke = 'var(--baseline)';
+    return;
+  }
+
+  const wilted = !!visual.wilted;
+  const level = visual.level || 0;
+  const stage = wilted ? FLOWER_STAGE_COUNT - 1 : visual.stage;
+  const shape = FLOWER_PETAL_SHAPES[level % FLOWER_PETAL_SHAPES.length];
+  const color = wilted ? 'var(--text-faint)' : FLOWER_COLORS[level % FLOWER_COLORS.length];
+  const p = FLOWER_STAGE_PARAMS[stage];
+
+  petals.forEach((petal, i) => {
+    petal.setAttribute('d', shape);
+    const angle = i * (360 / petals.length);
+    const droop = wilted ? 55 : 0;
+    const dist = wilted ? p.petalDist * 0.8 : p.petalDist;
+    const scale = wilted ? p.petalScale * 0.85 : p.petalScale;
+    petal.style.transform = `translate(50px,42px) rotate(${angle + droop}deg) translate(0,${-dist}px) scale(${scale})`;
+    petal.style.opacity = String(wilted ? 0.55 : 1);
+    petal.style.fill = color;
+  });
+
+  bud.style.transform = `translate(50px,46px) scale(${wilted ? 0 : p.bud})`;
+  bud.style.opacity = wilted ? '0' : '1';
+  bud.style.fill = color;
+
+  center.style.transform = `translate(50px,42px) scale(${wilted ? 0.5 : p.center})`;
+  center.style.opacity = String(wilted ? 0.4 : (p.center > 0 ? 1 : 0));
+
+  leaves.forEach(l => {
+    l.style.opacity = String(wilted ? 0.35 : p.leaf);
+    l.style.fill = wilted ? 'var(--text-faint)' : 'var(--good)';
+  });
+  stem.style.stroke = wilted ? 'var(--text-faint)' : 'var(--good)';
+}
+
+// Показываем предыдущее состояние цветка и на следующем кадре — новое, чтобы
+// сыграл CSS-transition, только если стрик реально поменялся с прошлого визита
+// (иначе цветок просто рисуется в конечном состоянии, без анимации при каждом
+// заходе на вкладку «Прогресс»).
+function renderStreakFlower(log, state) {
+  const streak = computeStreak(log);
+  const hasHistory = Object.keys(log).length > 0;
+  const prevStreak = state.lastSeenStreak || 0;
+
+  document.getElementById('s-streak').textContent = streak;
+  document.getElementById('streak-label').textContent = streak > 0
+    ? `${streak} ${pluralizeSlovo(streak)} подряд`
+    : (hasHistory ? 'стрик прервался — самое время вернуться' : 'начни серию дней сегодня');
+
+  const currVisual = describeFlowerState(streak, hasHistory);
+
+  if (prevStreak === streak) {
+    applyFlowerVisual(currVisual);
+  } else {
+    const prevVisual = describeFlowerState(prevStreak, hasHistory);
+    const svg = document.getElementById('streak-flower');
+    svg.classList.add('no-anim');
+    applyFlowerVisual(prevVisual);
+    void svg.offsetWidth; // форсируем reflow, чтобы стартовое состояние точно применилось без анимации
+    svg.classList.remove('no-anim');
+    requestAnimationFrame(() => requestAnimationFrame(() => applyFlowerVisual(currVisual)));
+  }
+
+  state.lastSeenStreak = streak;
+  Storage.saveState(state);
+}
+
 const HEATMAP_WEEKS = 26; // ~6 месяцев
 
 // Уровень интенсивности (0-4) считаем относительно собственного максимума за
@@ -869,7 +989,7 @@ function renderStats() {
   document.getElementById('s-total').textContent = words.length;
   document.getElementById('s-learned').textContent = words.filter(w => SRS.isMastered(w)).length;
   document.getElementById('s-due').textContent = words.filter(w => SRS.isDue(w)).length;
-  document.getElementById('s-streak').textContent = computeStreak(state.studyLog || {});
+  renderStreakFlower(state.studyLog || {}, state);
   renderActivityHeatmap(state.studyLog || {});
   renderCategoryBreakdown(words);
 }

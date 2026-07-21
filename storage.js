@@ -177,6 +177,7 @@ const Storage = {
         apiKey: '',
         backup: { lastBackupAt: null, changesSinceBackup: 0 },
         dataUpdatedAt: 0,
+        lastSeenStreak: 0, // для анимации цветка-стрика — чисто локальное, не синхронизируется
         github: { token: '', owner: '', repo: 'korean-words-data', path: 'data.json', sha: null, lastSyncAt: null },
         ...state,
       };
