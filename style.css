@@ -583,6 +583,43 @@ body {
 .related-add-row select { flex: 1; min-width: 120px; }
 .related-add-row .btn { flex-shrink: 0; }
 
+.hanja-char-tag { font-size: 15px; font-weight: 700; margin-right: 2px; }
+.hanja-suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.hanja-suggestion-chip { font-size: 12.5px; padding: 4px 10px; border-radius: 999px; border: 1px dashed var(--accent); background: var(--accent-soft); color: var(--accent); cursor: pointer; font-family: inherit; }
+.hanja-suggestion-chip:hover { background: var(--accent); color: var(--accent-ink); }
+.hanja-add-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.hanja-add-row input#f-hanja-char { width: 56px; text-align: center; font-size: 18px; flex: 0 0 auto; }
+.hanja-add-row input#f-hanja-reading { width: 130px; flex: 0 0 auto; }
+.hanja-add-row input#f-hanja-meaning { flex: 1; min-width: 120px; }
+.hanja-add-row .btn { flex-shrink: 0; }
+
+/* ===================== Hanja tab ===================== */
+.hanja-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+.hanja-tile {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px 8px; text-align: center; cursor: pointer; transition: transform .12s ease, box-shadow .12s ease;
+  font-family: inherit;
+}
+.hanja-tile:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+.hanja-tile-char { font-size: 30px; font-weight: 700; color: var(--text); }
+.hanja-tile-reading { font-size: 12px; color: var(--text-faint); margin-top: 4px; }
+.hanja-tile-count { font-size: 11px; color: var(--accent); margin-top: 2px; }
+
+.hanja-detail-card { text-align: center; padding: 28px 0 18px; }
+.hanja-detail-char { font-size: 72px; font-weight: 700; line-height: 1; }
+.hanja-detail-reading { margin-top: 8px; font-size: 15px; color: var(--text-faint); }
+
+.hanja-branches { display: flex; flex-direction: column; gap: 14px; margin-top: 10px; }
+.hanja-branch { border-left: 3px solid var(--accent); padding-left: 14px; }
+.hanja-branch-title { font-weight: 700; font-size: 14px; margin-bottom: 8px; color: var(--accent); }
+.hanja-branch-words { display: flex; flex-direction: column; gap: 6px; }
+.hanja-branch-word {
+  display: block; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 8px 12px; cursor: pointer; font-family: inherit; font-size: 13.5px; color: var(--text);
+}
+.hanja-branch-word:hover { border-color: var(--accent); }
+.hanja-branch-word b { margin-right: 6px; }
+
 #bulk-input { width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; font-family: ui-monospace, monospace; font-size: 13px; background: var(--bg); color: var(--text); }
 .bulk-preview { margin-top: 10px; font-size: 12.5px; color: var(--text-faint); max-height: 140px; overflow-y: auto; }
 .bulk-preview-row { padding: 4px 0; border-bottom: 1px solid var(--border); }

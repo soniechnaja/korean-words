@@ -1,6 +1,7 @@
 // Слой хранения: всё живёт в localStorage этого браузера.
 const STORAGE_KEY = 'kw_words_v1';
 const STATE_KEY = 'kw_state_v1';
+const HANJA_CUSTOM_KEY = 'kw_hanja_custom_v1';
 
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -56,6 +57,9 @@ function migrateWord(w) {
     examples,
     wordType: w.wordType || '',
     related: Array.isArray(w.related) ? w.related : [],
+    // hanja: [{ char: '韓', meaningInWord: 'Корея' }, ...] — по одному на слог/часть слова,
+    // пусто у исконно корейских слов (고유어).
+    hanja: Array.isArray(w.hanja) ? w.hanja : [],
     updatedAt: w.updatedAt || w.createdAt || Date.now(),
     srs,
   };
@@ -90,6 +94,16 @@ function mergeStudyLogs(a, b) {
   return merged;
 }
 
+// Те же принципы, что и mergeWordLists, но ключ — сам иероглиф, а не id.
+function mergeHanjaLists(localList, remoteList) {
+  const map = new Map(remoteList.map(h => [h.char, h]));
+  localList.forEach(h => {
+    const remote = map.get(h.char);
+    if (!remote || (h.updatedAt || 0) > (remote.updatedAt || 0)) map.set(h.char, h);
+  });
+  return [...map.values()];
+}
+
 const Storage = {
   getWords() {
     try {
@@ -121,6 +135,7 @@ const Storage = {
       createdAt: now,
       updatedAt: now,
       related: [],
+      hanja: Array.isArray(word.hanja) ? word.hanja : [],
       srs: {
         stage: 1, stageStreak: 0, learned: false, reviewStep: -1, nextReviewDate: null,
         inDailyBatch: false, totalReviews: 0, totalCorrect: 0, lastReviewed: null,
@@ -253,6 +268,41 @@ const Storage = {
     return JSON.stringify({ words: this.getWords(), state: safeState, exportedAt: new Date().toISOString() }, null, 2);
   },
 
+  // ---- Иероглифы (ханча): личные привязки живут на самом слове (hanja[]),
+  // а справочная база иероглифов — отдельная сущность. HANJA_BASE_DATA (см.
+  // hanja-data.js) — это готовый датасет 1800 базовых ханча, "кастомные" —
+  // те, что пользователь добавил сам и которых не было в базовом датасете.
+  getCustomHanja() {
+    try {
+      const raw = localStorage.getItem(HANJA_CUSTOM_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  },
+
+  saveCustomHanja(list) {
+    localStorage.setItem(HANJA_CUSTOM_KEY, JSON.stringify(list));
+  },
+
+  upsertCustomHanja(char, reading, meaning) {
+    const list = this.getCustomHanja().filter(h => h.char !== char);
+    list.push({ char, reading, meaning, updatedAt: Date.now() });
+    this.saveCustomHanja(list);
+    this.noteChange(1);
+  },
+
+  // Базовый датасет + кастомные (кастомные перекрывают базовые при совпадении символа).
+  getHanjaDatabase() {
+    const map = new Map(HANJA_BASE_DATA.map(h => [h.char, h]));
+    this.getCustomHanja().forEach(h => map.set(h.char, h));
+    return [...map.values()];
+  },
+
+  findHanja(char) {
+    return this.getHanjaDatabase().find(h => h.char === char) || null;
+  },
+
   // То, что реально синхронизируется между устройствами через GitHub —
   // без секретов (токен, API-ключ Claude, тема — всё это только для этого браузера).
   getSyncPayload() {
@@ -260,6 +310,7 @@ const Storage = {
     return {
       words: this.getWords(),
       studyLog: state.studyLog || {},
+      customHanja: this.getCustomHanja(),
       savedAt: state.dataUpdatedAt || 0,
     };
   },
@@ -270,6 +321,7 @@ const Storage = {
     const remoteWords = (payload.words || []).map(migrateWord);
     const { merged, remoteWasStale } = mergeWordLists(this.getWords(), remoteWords);
     this.saveWords(merged);
+    this.saveCustomHanja(mergeHanjaLists(this.getCustomHanja(), payload.customHanja || []));
 
     const state = this.getState();
     state.studyLog = mergeStudyLogs(state.studyLog || {}, payload.studyLog || {});

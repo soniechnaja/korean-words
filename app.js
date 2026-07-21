@@ -9,7 +9,9 @@ let sessionDirection = 'kr-ru'; // 'kr-ru' | 'ru-kr' | 'mixed'
 let studySession = null; // { queue, index, correct, reviewed }
 let writingSession = null; // { category, words }
 let currentEditId = null;
+let currentHanjaEntries = []; // [{ char, meaningInWord }] — рабочая копия, пока открыта модалка слова
 let toastTimer = null;
+let hanjaDetailChar = null;
 
 const CLAUDE_MODEL = 'claude-haiku-4-5';
 const BACKUP_REMINDER_THRESHOLD = 8;
@@ -97,6 +99,7 @@ function switchView(view) {
   if (view === 'dictionary') renderDictionary();
   if (view === 'study') updateStudyIntro();
   if (view === 'stats') renderStats();
+  if (view === 'hanja') renderHanjaTab();
   if (view === 'data') renderDataView();
 }
 
@@ -279,6 +282,73 @@ function fillRelatedWordSelect(word) {
   sel.innerHTML = options.length ? options.join('') : '<option value="">Нет доступных слов</option>';
 }
 
+function renderHanjaList() {
+  const wrap = document.getElementById('hanja-list');
+  if (currentHanjaEntries.length === 0) {
+    wrap.innerHTML = '<p class="hint-text" style="margin:0 0 10px;">Ханча не добавлена.</p>';
+    return;
+  }
+  wrap.innerHTML = currentHanjaEntries.map((h, i) => `
+    <div class="related-row">
+      <span class="hanja-char-tag">${esc(h.char)}</span>
+      <span style="flex:1;">${esc(h.meaningInWord)}</span>
+      <button type="button" class="related-remove" data-remove-hanja-index="${i}" title="Убрать">✕</button>
+    </div>
+  `).join('');
+}
+
+// Подсказки по слогам корейского слова — ищем в базе иероглиф с таким чтением.
+// Ничего не добавляется само: клик по подсказке только заполняет поля формы.
+function renderHanjaSuggestions() {
+  const wrap = document.getElementById('hanja-suggestions');
+  const korean = document.getElementById('f-korean').value;
+  const usedChars = new Set(currentHanjaEntries.map(h => h.char));
+  const syllables = [...new Set(korean.split('').filter(ch => /[가-힣]/.test(ch)))];
+  const db = Storage.getHanjaDatabase();
+  const suggestions = [];
+  syllables.forEach(syl => {
+    db.filter(h => h.reading === syl && !usedChars.has(h.char)).slice(0, 3).forEach(h => suggestions.push(h));
+  });
+  if (suggestions.length === 0) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = suggestions.map(h =>
+    `<button type="button" class="hanja-suggestion-chip" data-suggest-char="${esc(h.char)}" data-suggest-reading="${esc(h.reading)}" data-suggest-meaning="${esc(h.meaning)}">${esc(h.reading)} → ${esc(h.char)} (${esc(h.meaning)})</button>`
+  ).join('');
+}
+
+function updateHanjaCharInput() {
+  const char = document.getElementById('f-hanja-char').value.trim();
+  const readingInput = document.getElementById('f-hanja-reading');
+  const meaningInput = document.getElementById('f-hanja-meaning');
+  if (!char) { readingInput.hidden = true; return; }
+  const found = Storage.findHanja(char);
+  if (found) {
+    readingInput.hidden = true;
+    if (!meaningInput.value) meaningInput.value = found.meaning;
+  } else {
+    readingInput.hidden = false;
+  }
+}
+
+function handleAddHanja() {
+  const char = document.getElementById('f-hanja-char').value.trim();
+  const reading = document.getElementById('f-hanja-reading').value.trim();
+  const meaning = document.getElementById('f-hanja-meaning').value.trim();
+  if (!char || !meaning) return;
+
+  if (!Storage.findHanja(char)) {
+    if (!reading) { showToast('Укажи чтение — этого иероглифа ещё нет в базе'); return; }
+    Storage.upsertCustomHanja(char, reading, meaning);
+  }
+
+  currentHanjaEntries.push({ char, meaningInWord: meaning });
+  renderHanjaList();
+  document.getElementById('f-hanja-char').value = '';
+  document.getElementById('f-hanja-reading').value = '';
+  document.getElementById('f-hanja-reading').hidden = true;
+  document.getElementById('f-hanja-meaning').value = '';
+  renderHanjaSuggestions();
+}
+
 function openWordModal(word) {
   currentEditId = word ? word.id : null;
   document.getElementById('word-modal-title').textContent = word ? 'Редактировать слово' : 'Новое слово';
@@ -298,6 +368,14 @@ function openWordModal(word) {
     fillRelatedWordSelect(word);
   }
 
+  currentHanjaEntries = word ? [...(word.hanja || [])] : [];
+  document.getElementById('f-hanja-char').value = '';
+  document.getElementById('f-hanja-reading').value = '';
+  document.getElementById('f-hanja-reading').hidden = true;
+  document.getElementById('f-hanja-meaning').value = '';
+  renderHanjaList();
+  renderHanjaSuggestions();
+
   fillCategoryDatalist();
   document.getElementById('word-modal-overlay').hidden = false;
   document.getElementById('f-korean').focus();
@@ -307,6 +385,7 @@ function closeWordModal() {
   document.getElementById('word-modal-overlay').hidden = true;
   document.getElementById('word-form').reset();
   currentEditId = null;
+  currentHanjaEntries = [];
 }
 
 function handleWordFormSubmit(e) {
@@ -317,6 +396,7 @@ function handleWordFormSubmit(e) {
     transcription: document.getElementById('f-transcription').value,
     category: document.getElementById('f-category').value,
     wordType: document.getElementById('f-word-type').value,
+    hanja: currentHanjaEntries,
     examples: document.getElementById('f-examples').value.split('\n').map(s => s.trim()).filter(Boolean),
     notes: document.getElementById('f-notes').value,
   };
@@ -1071,6 +1151,111 @@ function renderStats() {
   renderCategoryBreakdown(words);
 }
 
+// ---------- hanja (иероглифика) ----------
+
+function pluralizeHieroglyph(n) {
+  const mod10 = n % 10, mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) return 'иероглифов';
+  if (mod10 === 1) return 'иероглиф';
+  if (mod10 >= 2 && mod10 <= 4) return 'иероглифа';
+  return 'иероглифов';
+}
+
+// char -> [{ word, meaningInWord }] по всем словам словаря.
+function computeHanjaUsageMap() {
+  const map = new Map();
+  Storage.getWords().forEach(w => {
+    (w.hanja || []).forEach(h => {
+      if (!map.has(h.char)) map.set(h.char, []);
+      map.get(h.char).push({ word: w, meaningInWord: h.meaningInWord });
+    });
+  });
+  return map;
+}
+
+function renderHanjaTab() {
+  const usageMap = computeHanjaUsageMap();
+  const count = usageMap.size;
+  document.getElementById('hanja-count').textContent = `${count} ${pluralizeHieroglyph(count)} в твоих словах`;
+  document.getElementById('hanja-empty-state').hidden = count !== 0;
+  document.getElementById('hanja-detail-view').hidden = true;
+  document.getElementById('hanja-list-view').hidden = false;
+  renderHanjaGrid(usageMap);
+}
+
+function renderHanjaGrid(usageMap) {
+  const searchTerm = (document.getElementById('hanja-search-input').value || '').trim().toLowerCase();
+  const db = Storage.getHanjaDatabase();
+  const rows = [...usageMap.keys()].map(char => {
+    const dbEntry = db.find(h => h.char === char);
+    return {
+      char,
+      reading: dbEntry ? dbEntry.reading : '',
+      meaning: dbEntry ? dbEntry.meaning : '',
+      count: usageMap.get(char).length,
+    };
+  });
+  const filtered = searchTerm
+    ? rows.filter(r => r.char.includes(searchTerm) || r.reading.toLowerCase().includes(searchTerm) || r.meaning.toLowerCase().includes(searchTerm))
+    : rows;
+  filtered.sort((a, b) => b.count - a.count || a.char.localeCompare(b.char));
+
+  const grid = document.getElementById('hanja-grid');
+  if (filtered.length === 0) {
+    grid.innerHTML = searchTerm ? '<p class="hint-text">Ничего не найдено.</p>' : '';
+  } else {
+    grid.innerHTML = filtered.map(r => `
+      <button type="button" class="hanja-tile" data-char="${esc(r.char)}">
+        <div class="hanja-tile-char">${esc(r.char)}</div>
+        <div class="hanja-tile-reading">${esc(r.reading)}</div>
+        <div class="hanja-tile-count">${r.count} ${esc(pluralizeSlovo(r.count))}</div>
+      </button>
+    `).join('');
+    grid.querySelectorAll('.hanja-tile').forEach(btn => {
+      btn.addEventListener('click', () => openHanjaDetail(btn.dataset.char));
+    });
+  }
+}
+
+// Группируем слова, использующие этот иероглиф, по значению именно В ЭТОМ
+// СЛОВЕ (meaningInWord) — один и тот же символ в разных словах может нести
+// разный смысловой оттенок, и это отдельные "ветки" смыслового мини-майндмэпа.
+function openHanjaDetail(char) {
+  hanjaDetailChar = char;
+  const usages = computeHanjaUsageMap().get(char) || [];
+  const dbEntry = Storage.findHanja(char);
+
+  document.getElementById('hanja-list-view').hidden = true;
+  document.getElementById('hanja-detail-view').hidden = false;
+  document.getElementById('hanja-detail-char').textContent = char;
+  document.getElementById('hanja-detail-reading').textContent = dbEntry
+    ? `${dbEntry.reading} · ${dbEntry.meaning}`
+    : 'нет в базовом словаре иероглифов';
+
+  const clusters = new Map();
+  usages.forEach(u => {
+    const key = (u.meaningInWord || '').trim() || '(без указанного значения)';
+    if (!clusters.has(key)) clusters.set(key, []);
+    clusters.get(key).push(u.word);
+  });
+
+  const wrap = document.getElementById('hanja-branches');
+  wrap.innerHTML = [...clusters.entries()].map(([meaning, words]) => `
+    <div class="hanja-branch">
+      <div class="hanja-branch-title">→ ${esc(meaning)}</div>
+      <div class="hanja-branch-words">
+        ${words.map(w => `<button type="button" class="hanja-branch-word" data-word-id="${w.id}"><b>${esc(w.korean)}</b>${esc(w.translation)}</button>`).join('')}
+      </div>
+    </div>
+  `).join('');
+  wrap.querySelectorAll('.hanja-branch-word').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const word = Storage.getWords().find(w => w.id === btn.dataset.wordId);
+      if (word) openWordModal(word);
+    });
+  });
+}
+
 // ---------- data (export / import / clear / api key / backup) ----------
 
 function renderDataView() {
@@ -1348,6 +1533,9 @@ function wireEvents() {
     renderDictionary();
   });
 
+  document.getElementById('hanja-search-input').addEventListener('input', () => renderHanjaGrid(computeHanjaUsageMap()));
+  document.getElementById('btn-hanja-back').addEventListener('click', renderHanjaTab);
+
   document.getElementById('btn-add-word').addEventListener('click', () => openWordModal(null));
   document.getElementById('btn-add-word-empty').addEventListener('click', () => openWordModal(null));
   document.getElementById('word-modal-close').addEventListener('click', closeWordModal);
@@ -1381,6 +1569,25 @@ function wireEvents() {
     const updated = Storage.getWords().find(w => w.id === currentEditId);
     renderRelatedList(updated);
     fillRelatedWordSelect(updated);
+  });
+
+  document.getElementById('hanja-list').addEventListener('click', e => {
+    const removeBtn = e.target.closest('[data-remove-hanja-index]');
+    if (!removeBtn) return;
+    currentHanjaEntries.splice(parseInt(removeBtn.dataset.removeHanjaIndex, 10), 1);
+    renderHanjaList();
+    renderHanjaSuggestions();
+  });
+  document.getElementById('f-hanja-char').addEventListener('input', updateHanjaCharInput);
+  document.getElementById('btn-add-hanja').addEventListener('click', handleAddHanja);
+  document.getElementById('f-korean').addEventListener('input', renderHanjaSuggestions);
+  document.getElementById('hanja-suggestions').addEventListener('click', e => {
+    const chip = e.target.closest('.hanja-suggestion-chip');
+    if (!chip) return;
+    document.getElementById('f-hanja-char').value = chip.dataset.suggestChar;
+    document.getElementById('f-hanja-reading').value = chip.dataset.suggestReading;
+    document.getElementById('f-hanja-reading').hidden = true;
+    document.getElementById('f-hanja-meaning').value = chip.dataset.suggestMeaning;
   });
 
   document.getElementById('btn-bulk-add').addEventListener('click', openBulkModal);

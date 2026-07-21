@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="단어장">
 <!-- bump ?v= below on every deploy so browsers don't serve stale cached files -->
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
 
@@ -34,6 +34,9 @@
     <button class="nav-btn" data-view="stats">
       <span class="nav-icon">📊</span> Прогресс
     </button>
+    <button class="nav-btn" data-view="hanja">
+      <span class="nav-icon">漢</span> Иероглифика
+    </button>
     <div class="nav-spacer"></div>
     <button class="nav-btn nav-btn-ghost" data-view="data">
       <span class="nav-icon">💾</span> Данные
@@ -47,6 +50,7 @@
     <button class="mobile-tab active" data-view="dictionary">📖</button>
     <button class="mobile-tab" data-view="study">🎯<span class="mobile-badge" id="due-badge-mobile" hidden>0</span></button>
     <button class="mobile-tab" data-view="stats">📊</button>
+    <button class="mobile-tab" data-view="hanja">漢</button>
     <button class="mobile-tab" data-view="data">💾</button>
   </div>
 
@@ -250,6 +254,39 @@
       </div>
     </section>
 
+    <!-- ============ HANJA VIEW ============ -->
+    <section class="view" id="view-hanja">
+      <header class="view-header">
+        <div>
+          <h1>Иероглифика</h1>
+          <p class="subtitle" id="hanja-count">0 иероглифов</p>
+        </div>
+      </header>
+
+      <div id="hanja-list-view">
+        <div class="toolbar">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="hanja-search-input" placeholder="Поиск по иероглифу, чтению, значению...">
+          </div>
+        </div>
+        <div class="hanja-grid" id="hanja-grid"></div>
+        <div class="empty-state" id="hanja-empty-state" hidden>
+          <div class="empty-emoji">漢</div>
+          <p>Пока ни в одном слове нет ханчи.<br>Добавь иероглиф к слову в словаре — и он появится здесь.</p>
+        </div>
+      </div>
+
+      <div id="hanja-detail-view" hidden>
+        <button class="btn btn-ghost" id="btn-hanja-back">← Ко всем иероглифам</button>
+        <div class="hanja-detail-card">
+          <div class="hanja-detail-char" id="hanja-detail-char"></div>
+          <div class="hanja-detail-reading" id="hanja-detail-reading"></div>
+        </div>
+        <div class="hanja-branches" id="hanja-branches"></div>
+      </div>
+    </section>
+
     <!-- ============ DATA VIEW ============ -->
     <section class="view" id="view-data">
       <header class="view-header">
@@ -369,6 +406,20 @@
           <option value="Другое">Другое</option>
         </select>
       </label>
+
+      <div class="field hanja-field" id="hanja-field">
+        <span>Ханча (иероглифика)</span>
+        <div id="hanja-list" class="related-list"></div>
+        <div class="hanja-suggestions" id="hanja-suggestions"></div>
+        <div class="hanja-add-row">
+          <input type="text" id="f-hanja-char" placeholder="한자" maxlength="2">
+          <input type="text" id="f-hanja-reading" placeholder="чтение (напр. 한)" hidden>
+          <input type="text" id="f-hanja-meaning" placeholder="значение в этом слове">
+          <button type="button" class="btn btn-ghost" id="btn-add-hanja">Добавить</button>
+        </div>
+        <p class="hint-text" style="margin-top:6px;">Необязательно. Пусто — если слово исконно корейское (고유어).</p>
+      </div>
+
       <label class="field">
         <span>Примеры (по одному предложению на строке)</span>
         <textarea id="f-examples" rows="3" placeholder="사랑해요 — я люблю тебя"></textarea>
@@ -430,8 +481,9 @@
 
 <div class="toast" id="toast" hidden></div>
 
-<script src="storage.js?v=10"></script>
-<script src="srs.js?v=10"></script>
-<script src="app.js?v=10"></script>
+<script src="hanja-data.js?v=11"></script>
+<script src="storage.js?v=11"></script>
+<script src="srs.js?v=11"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>
