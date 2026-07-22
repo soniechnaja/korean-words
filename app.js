@@ -1001,6 +1001,7 @@ function describeFlowerState(streak, hasHistory) {
 // поэтому эта функция не занимается анимацией сама, только конечным состоянием.
 function applyFlowerVisual(visual) {
   const svg = document.getElementById('streak-flower');
+  if (!svg) return; // разметка ещё не на этой странице — не роняем вызывающий поток
   const petals = [...svg.querySelectorAll('.fl-petal')];
   const bud = document.getElementById('fl-bud');
   const center = document.getElementById('fl-center');
@@ -1062,10 +1063,14 @@ function renderStreakFlower(log, state) {
   const hasHistory = Object.keys(log).length > 0;
   const prevStreak = state.lastSeenStreak || 0;
 
-  document.getElementById('s-streak').textContent = streak;
-  document.getElementById('streak-label').textContent = streak > 0
-    ? `${streak} ${pluralizeSlovo(streak)} подряд`
-    : (hasHistory ? 'стрик прервался — самое время вернуться' : 'начни серию дней сегодня');
+  const streakNumEl = document.getElementById('s-streak');
+  if (streakNumEl) streakNumEl.textContent = streak;
+  const streakLabelEl = document.getElementById('streak-label');
+  if (streakLabelEl) {
+    streakLabelEl.textContent = streak > 0
+      ? `${streak} ${pluralizeSlovo(streak)} подряд`
+      : (hasHistory ? 'стрик прервался — самое время вернуться' : 'начни серию дней сегодня');
+  }
 
   const currVisual = describeFlowerState(streak, hasHistory);
 
@@ -1074,11 +1079,13 @@ function renderStreakFlower(log, state) {
   } else {
     const prevVisual = describeFlowerState(prevStreak, hasHistory);
     const svg = document.getElementById('streak-flower');
-    svg.classList.add('no-anim');
-    applyFlowerVisual(prevVisual);
-    void svg.offsetWidth; // форсируем reflow, чтобы стартовое состояние точно применилось без анимации
-    svg.classList.remove('no-anim');
-    requestAnimationFrame(() => requestAnimationFrame(() => applyFlowerVisual(currVisual)));
+    if (svg) {
+      svg.classList.add('no-anim');
+      applyFlowerVisual(prevVisual);
+      void svg.offsetWidth; // форсируем reflow, чтобы стартовое состояние точно применилось без анимации
+      svg.classList.remove('no-anim');
+      requestAnimationFrame(() => requestAnimationFrame(() => applyFlowerVisual(currVisual)));
+    }
   }
 
   state.lastSeenStreak = streak;
@@ -1135,7 +1142,9 @@ function renderLearnedChart(words) {
     `;
   }).join('');
 
-  document.getElementById('learned-chart').innerHTML = `<div class="lc-bars">${barsHtml}</div>`;
+  const container = document.getElementById('learned-chart');
+  if (!container) return; // разметка ещё не на этой странице (например, устаревший закэшированный HTML) — не роняем вызывающий поток
+  container.innerHTML = `<div class="lc-bars">${barsHtml}</div>`;
 }
 
 function renderStats() {
@@ -1334,6 +1343,21 @@ async function githubPutFile(gh, payload, sha, opts) {
   return data.content.sha;
 }
 
+// Данные к этому моменту уже сохранены (localStorage и/или GitHub) — если сама
+// отрисовка споткнётся (например, устаревший закэшированный HTML без нужного
+// элемента), это не должно ни ронять весь поток, ни выглядеть как "не
+// получилось синхронизировать". Каждый вызов изолирован отдельным try/catch,
+// чтобы сбой одной функции не помешал остальным обновить свою часть экрана.
+function refreshAllViews() {
+  [renderDictionary, updateStudyIntro, renderStats, renderDataView].forEach(fn => {
+    try {
+      fn();
+    } catch (err) {
+      console.warn(`${fn.name} failed during view refresh`, err);
+    }
+  });
+}
+
 async function pushToGithub(manual, knownMissing, opts) {
   const state = Storage.getState();
   const gh = state.github;
@@ -1354,7 +1378,7 @@ async function pushToGithub(manual, knownMissing, opts) {
     s.github.lastSyncAt = Date.now();
     Storage.saveState(s);
     if (manual) showToast('Синхронизировано ✓');
-    renderDataView();
+    refreshAllViews();
   } catch (err) {
     console.warn('sync push failed', err);
     if (manual) showToast('Не получилось синхронизировать: ' + (err.message || 'ошибка'));
@@ -1384,16 +1408,13 @@ async function pullFromGithub(manual) {
     s.github.sha = remote.sha;
     s.github.lastSyncAt = Date.now();
     Storage.saveState(s);
-    renderDictionary();
-    updateStudyIntro();
-    renderStats();
+    refreshAllViews();
 
     if (remoteWasStale) {
       await pushToGithub(manual);
     } else if (manual) {
       showToast('Синхронизировано ✓');
     }
-    renderDataView();
   } catch (err) {
     console.warn('sync pull failed', err);
     showToast('Не получилось синхронизировать: ' + (err.message || 'ошибка'));
@@ -1668,9 +1689,7 @@ if ('serviceWorker' in navigator) {
 // Тихая синхронизация в фоне — первая отрисовка не ждёт сеть,
 // а когда данные подтянутся, экран сам обновится.
 pullFromGithub(false).then(() => {
-  renderDictionary();
-  updateStudyIntro();
-  renderStats();
+  refreshAllViews();
   maybeAutoSyncPush(); // на случай изменений из прошлой сессии, которые ещё не улетели в облако
 });
 
