@@ -291,7 +291,7 @@ function renderHanjaList() {
   wrap.innerHTML = currentHanjaEntries.map((h, i) => `
     <div class="related-row">
       <span class="hanja-char-tag">${esc(h.char)}</span>
-      <span style="flex:1;">${esc(h.meaningInWord)}</span>
+      <span class="hanja-meaning-text">${esc(h.meaningInWord)}</span>
       <button type="button" class="related-remove" data-remove-hanja-index="${i}" title="Убрать">✕</button>
     </div>
   `).join('');
