@@ -39,6 +39,7 @@ const SRS = {
         if (srs.stage > NEW_WORD_STAGE_MAX) {
           // Прошло 3-ю стадию (вставка в предложение) — "выучено сегодня", уходит в очередь повторения.
           srs.learned = true;
+          srs.learnedAt = now; // для графика "выучено за последние 30 дней" — считается от текущего статуса, не от исторического лога
           srs.reviewStep = 0;
           srs.nextReviewDate = now + REVIEW_INTERVALS_DAYS[0] * DAY_MS;
         }

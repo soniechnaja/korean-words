@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="단어장">
 <!-- bump ?v= below on every deploy so browsers don't serve stale cached files -->
-<link rel="stylesheet" href="style.css?v=16">
+<link rel="stylesheet" href="style.css?v=17">
 </head>
 <body>
 
@@ -244,13 +244,8 @@
       </div>
 
       <div class="panel">
-        <h3>Активность за последние 6 месяцев</h3>
-        <div id="activity-chart"></div>
-      </div>
-
-      <div class="panel">
-        <h3>По темам</h3>
-        <div class="category-breakdown" id="category-breakdown"></div>
+        <h3>Выучено слов за последние 30 дней</h3>
+        <div id="learned-chart" class="learned-chart"></div>
       </div>
     </section>
 
@@ -482,9 +477,9 @@
 
 <div class="toast" id="toast" hidden></div>
 
-<script src="hanja-data.js?v=16"></script>
-<script src="storage.js?v=16"></script>
-<script src="srs.js?v=16"></script>
-<script src="app.js?v=16"></script>
+<script src="hanja-data.js?v=17"></script>
+<script src="storage.js?v=17"></script>
+<script src="srs.js?v=17"></script>
+<script src="app.js?v=17"></script>
 </body>
 </html>

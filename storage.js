@@ -26,10 +26,13 @@ function migrateWord(w) {
     // Уже в актуальном формате — только подстрахуем дефолты недостающих полей
     // (например, после добавления нового поля в будущем).
     srs = {
-      stage: 1, stageStreak: 0, learned: false, reviewStep: -1, nextReviewDate: null,
+      stage: 1, stageStreak: 0, learned: false, learnedAt: null, reviewStep: -1, nextReviewDate: null,
       inDailyBatch: false, totalReviews: 0, totalCorrect: 0, lastReviewed: null,
       ...oldSrs,
     };
+    // Слово уже было выучено до того, как появилось поле learnedAt — берём
+    // дату последнего изменения слова как приближение для графика активности.
+    if (srs.learned && !srs.learnedAt) srs.learnedAt = w.updatedAt || w.createdAt || Date.now();
   } else {
     // Старый формат (level 0-7 + dueDate + stage 1-4, без разделения на "новые"
     // и "повтор"). Если слово уже дошло хотя бы до стадии 3 ("предложение") —
@@ -42,6 +45,7 @@ function migrateWord(w) {
       stage: Math.min(oldSrs.stage || 1, 2),
       stageStreak: 0,
       learned: wasLearned,
+      learnedAt: wasLearned ? (w.updatedAt || w.createdAt || Date.now()) : null,
       // 5 = REVIEW_INTERVALS_DAYS.length - 1 в srs.js — держим в уме при правке той лестницы.
       reviewStep: wasLearned ? Math.max(0, Math.min(oldSrs.level ?? 0, 5)) : -1,
       nextReviewDate: wasLearned ? (oldSrs.dueDate ?? Date.now()) : null,
@@ -137,7 +141,7 @@ const Storage = {
       related: [],
       hanja: Array.isArray(word.hanja) ? word.hanja : [],
       srs: {
-        stage: 1, stageStreak: 0, learned: false, reviewStep: -1, nextReviewDate: null,
+        stage: 1, stageStreak: 0, learned: false, learnedAt: null, reviewStep: -1, nextReviewDate: null,
         inDailyBatch: false, totalReviews: 0, totalCorrect: 0, lastReviewed: null,
       },
     };

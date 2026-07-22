@@ -1085,106 +1085,57 @@ function renderStreakFlower(log, state) {
   Storage.saveState(state);
 }
 
-const HEATMAP_WEEKS = 26; // ~6 месяцев
+const LEARNED_CHART_DAYS = 30;
 
-// Уровень интенсивности (0-4) считаем относительно собственного максимума за
-// период, а не по фиксированным порогам — иначе у того, кто учит по 10 слов
-// в сессию, вся сетка была бы одного цвета рядом с тем, кто проходит по 100.
-function heatmapLevels(counts) {
-  const max = Math.max(...counts, 0);
-  if (max === 0) return counts.map(() => 0);
-  const t1 = Math.max(1, Math.ceil(max * 0.25));
-  const t2 = Math.max(t1 + 1, Math.ceil(max * 0.5));
-  const t3 = Math.max(t2 + 1, Math.ceil(max * 0.75));
-  return counts.map(c => {
-    if (c === 0) return 0;
-    if (c <= t1) return 1;
-    if (c <= t2) return 2;
-    if (c <= t3) return 3;
-    return 4;
-  });
-}
-
-function renderActivityHeatmap(log) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const start = new Date(today);
-  start.setDate(start.getDate() - (HEATMAP_WEEKS * 7 - 1));
-  const startDow = (start.getDay() + 6) % 7; // 0 = понедельник — довыравниваем до полных недель
-  start.setDate(start.getDate() - startDow);
-
+// Пересчитываем прямо из ТЕКУЩЕГО состояния слов (по дате последнего перехода
+// в статус "выучено", srs.learnedAt) — не из исторического лога. Если слово
+// провалит достаточно повторений и когда-нибудь перестанет считаться
+// "выученным", оно само перестанет попадать в счётчик того дня, без отдельной
+// правки истории задним числом.
+function renderLearnedChart(words) {
+  // Не обнуляем время суток здесь: todayStr() переводит дату в UTC-строку, а
+  // локальная полночь при положительном часовом поясе (например, UTC+3)
+  // после этого конвертируется в предыдущий UTC-день — тогда "сегодняшний"
+  // столбец никогда бы не совпадал с датой в learnedAt, которая берётся от
+  // текущего момента без обнуления. Держим оба конца в одном базисе.
   const days = [];
-  for (const d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
-    days.push(new Date(d));
+  for (let i = LEARNED_CHART_DAYS - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push(d);
   }
 
-  const counts = days.map(d => log[todayStr(d)] || 0);
-  const levels = heatmapLevels(counts);
-  const weeks = Math.ceil(days.length / 7);
-
-  let lastMonth = null;
-  let monthsHtml = '';
-  let cellsHtml = '';
-
-  days.forEach((d, i) => {
-    const weekIndex = Math.floor(i / 7);
-    const dow = (d.getDay() + 6) % 7;
-
-    if (d.getDate() <= 7 && d.getMonth() !== lastMonth) {
-      lastMonth = d.getMonth();
-      const label = d.toLocaleDateString('ru-RU', { month: 'short' });
-      monthsHtml += `<div class="heat-month" style="grid-column:${weekIndex + 2};">${esc(label)}</div>`;
-    }
-
-    const dateLabel = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
-    const count = counts[i];
-    cellsHtml += `<div class="heat-cell level-${levels[i]}" style="grid-column:${weekIndex + 2}; grid-row:${dow + 2};" title="${esc(dateLabel)}: ${count} ${esc(pluralizeSlovo(count))}"></div>`;
-  });
-
-  const dayLabels = ['Пн', '', 'Ср', '', 'Пт', '', ''];
-  const dayLabelsHtml = dayLabels.map((l, i) => `<div class="heat-daylabel" style="grid-row:${i + 2};">${esc(l)}</div>`).join('');
-
-  document.getElementById('activity-chart').innerHTML = `
-    <div class="heat-scroll">
-      <div class="heat-grid" style="grid-template-columns: 26px repeat(${weeks}, 12px); grid-template-rows: 16px repeat(7, 12px);">
-        ${monthsHtml}
-        ${dayLabelsHtml}
-        ${cellsHtml}
-      </div>
-    </div>
-    <div class="heat-legend">
-      <span>Меньше</span>
-      <span class="heat-cell level-0"></span>
-      <span class="heat-cell level-1"></span>
-      <span class="heat-cell level-2"></span>
-      <span class="heat-cell level-3"></span>
-      <span class="heat-cell level-4"></span>
-      <span>больше</span>
-    </div>
-  `;
-}
-
-function renderCategoryBreakdown(words) {
-  const wrap = document.getElementById('category-breakdown');
-  if (words.length === 0) {
-    wrap.innerHTML = '<p class="hint-text">Пока нет слов.</p>';
-    return;
-  }
-  const counts = {};
+  const counts = new Map(days.map(d => [todayStr(d), 0]));
   words.forEach(w => {
-    const cat = w.category || 'без темы';
-    counts[cat] = (counts[cat] || 0) + 1;
+    if (!w.srs.learned || !w.srs.learnedAt) return;
+    const key = todayStr(w.srs.learnedAt);
+    if (counts.has(key)) counts.set(key, counts.get(key) + 1);
   });
-  const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  const maxCount = rows[0][1];
-  wrap.innerHTML = rows.map(([name, count]) => `
-    <div class="cat-row">
-      <div class="cat-row-name">${esc(name)}</div>
-      <div class="cat-row-bar-bg"><div class="cat-row-bar-fill" style="width:${Math.round(count / maxCount * 100)}%"></div></div>
-      <div class="cat-row-count">${count}</div>
-    </div>
-  `).join('');
+
+  const values = days.map(d => counts.get(todayStr(d)));
+  const max = Math.max(...values, 1);
+  const todayKey = todayStr();
+
+  const barsHtml = days.map((d, i) => {
+    const count = values[i];
+    const heightPct = Math.round((count / max) * 100);
+    const dayKey = todayStr(d);
+    const isToday = dayKey === todayKey;
+    const dateLabel = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+    // Подписей на 30 столбцов слишком много — показываем только каждый 5-й
+    // день и сегодня, остальное несёт подсказка по наведению.
+    const showLabel = i % 5 === 0 || isToday;
+    const dayLabel = showLabel ? d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : '';
+    return `
+      <div class="lc-col">
+        <div class="chart-tooltip">${esc(dateLabel)}: ${count} ${esc(pluralizeSlovo(count))}</div>
+        <div class="lc-bar ${count === 0 ? 'zero' : ''}" style="height:${count === 0 ? '3px' : heightPct + '%'}"></div>
+        <div class="lc-day-label ${isToday ? 'today' : ''}">${esc(dayLabel)}</div>
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('learned-chart').innerHTML = `<div class="lc-bars">${barsHtml}</div>`;
 }
 
 function renderStats() {
@@ -1194,8 +1145,7 @@ function renderStats() {
   document.getElementById('s-learned').textContent = words.filter(w => SRS.isLearned(w)).length;
   document.getElementById('s-due').textContent = words.filter(w => SRS.isReviewDue(w)).length;
   renderStreakFlower(state.studyLog || {}, state);
-  renderActivityHeatmap(state.studyLog || {});
-  renderCategoryBreakdown(words);
+  renderLearnedChart(words);
 }
 
 // ---------- hanja (иероглифика) ----------
