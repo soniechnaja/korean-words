@@ -604,11 +604,21 @@ function updateStudyIntro() {
 // Новые слова: стадия 1 — карточка, стадия 2 — выбор перевода. После стадии 2
 // слово выпускается в очередь повторения (см. SRS.gradeNewWord).
 function pickNewWordCardMode(word, allWords) {
-  if (word.srs.stage <= 1) return 'flash';
+  const stage = word.srs.stage;
+  if (stage <= 1) return 'flash';
+
   const otherTranslations = new Set(
     allWords.filter(w => w.id !== word.id && w.translation !== word.translation).map(w => w.translation)
   );
-  return otherTranslations.size >= 3 ? 'quiz' : 'flash';
+  const canQuiz = otherTranslations.size >= 3;
+
+  if (stage === 2) return canQuiz ? 'quiz' : 'flash';
+
+  // stage 3: вставить слово в предложение
+  const usableExamples = (word.examples || []).filter(ex => ex.includes(word.korean));
+  const otherKoreans = new Set(allWords.filter(w => w.id !== word.id && w.korean !== word.korean).map(w => w.korean));
+  if (usableExamples.length > 0 && otherKoreans.size >= 3) return 'fillblank';
+  return canQuiz ? 'quiz' : 'flash';
 }
 
 // Повторение: чередуем выбор перевода и вставку слова в предложение — оба дают
