@@ -668,4 +668,22 @@ body {
     border-radius: 999px; min-width: 15px; height: 15px; display: flex; align-items: center; justify-content: center;
   }
   .main { padding: 20px 16px 60px; }
+  .segmented button { padding: 8px 11px; font-size: 12.5px; }
+}
+
+@media (max-width: 480px) {
+  /* Дневная цель (15/25/35/50) не помещается в один ряд на узких телефонах —
+     переносим в сетку 2×2 вместо обрезки за краем экрана. */
+  .study-block .session-size { flex-direction: column; align-items: flex-start; gap: 8px; }
+  #daily-goal {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    width: 100%;
+  }
+  #daily-goal button {
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  #daily-goal button:nth-child(2n) { border-right: none; }
+  #daily-goal button:nth-last-child(-n+2) { border-bottom: none; }
 }

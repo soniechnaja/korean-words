@@ -205,6 +205,7 @@ const Storage = {
     const state = this.getState();
     state.backup = { lastBackupAt: null, changesSinceBackup: 0 };
     state.studyLog = {};
+    state.dailyLearnedLog = {};
     state.dataUpdatedAt = Date.now();
     this.saveState(state);
   },
@@ -216,6 +217,7 @@ const Storage = {
       return {
         theme: null,
         studyLog: {},
+        dailyLearnedLog: {},
         apiKey: '',
         backup: { lastBackupAt: null, changesSinceBackup: 0 },
         dataUpdatedAt: 0,
@@ -226,7 +228,7 @@ const Storage = {
       };
     } catch (e) {
       return {
-        theme: null, studyLog: {}, apiKey: '',
+        theme: null, studyLog: {}, dailyLearnedLog: {}, apiKey: '',
         backup: { lastBackupAt: null, changesSinceBackup: 0 },
         dataUpdatedAt: 0,
         github: { token: '', owner: '', repo: 'korean-words-data', path: 'data.json', sha: null, lastSyncAt: null },
@@ -243,6 +245,17 @@ const Storage = {
     const day = todayStr();
     state.studyLog = state.studyLog || {};
     state.studyLog[day] = (state.studyLog[day] || 0) + count;
+    this.saveState(state);
+  },
+
+  // Считает выученные сегодня слова суммарно за календарный день — не
+  // привязано к дневной пачке, поэтому не обнуляется, когда пачка закрыта и
+  // назначена новая. Сбрасывается само собой при смене дня (ключ — todayStr()).
+  logWordLearned() {
+    const state = this.getState();
+    const day = todayStr();
+    state.dailyLearnedLog = state.dailyLearnedLog || {};
+    state.dailyLearnedLog[day] = (state.dailyLearnedLog[day] || 0) + 1;
     this.saveState(state);
   },
 
@@ -310,6 +323,7 @@ const Storage = {
     return {
       words: this.getWords(),
       studyLog: state.studyLog || {},
+      dailyLearnedLog: state.dailyLearnedLog || {},
       customHanja: this.getCustomHanja(),
       savedAt: state.dataUpdatedAt || 0,
     };
@@ -325,6 +339,7 @@ const Storage = {
 
     const state = this.getState();
     state.studyLog = mergeStudyLogs(state.studyLog || {}, payload.studyLog || {});
+    state.dailyLearnedLog = mergeStudyLogs(state.dailyLearnedLog || {}, payload.dailyLearnedLog || {});
     state.dataUpdatedAt = Date.now();
     this.saveState(state);
 
@@ -352,9 +367,10 @@ const Storage = {
     }
     // Из импортированного файла берём только историю занятий — секреты
     // (API-ключи, токен GitHub, тема) этого браузера никогда не перезаписываем.
-    if (data.state && data.state.studyLog) {
+    if (data.state && (data.state.studyLog || data.state.dailyLearnedLog)) {
       const state = this.getState();
-      state.studyLog = { ...state.studyLog, ...data.state.studyLog };
+      state.studyLog = { ...state.studyLog, ...(data.state.studyLog || {}) };
+      state.dailyLearnedLog = { ...state.dailyLearnedLog, ...(data.state.dailyLearnedLog || {}) };
       this.saveState(state);
     }
     this.noteChange(added);

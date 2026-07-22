@@ -575,8 +575,13 @@ function updateStudyIntro() {
 
   document.getElementById('new-words-block').hidden = batchAll.length === 0;
   if (batchAll.length > 0) {
-    const learnedInBatch = batchAll.filter(w => w.srs.learned).length;
-    document.getElementById('daily-progress-label').textContent = `${learnedInBatch} из ${batchAll.length}`;
+    // Счётчик — сколько слов выучено сегодня СУММАРНО за день (см. Storage.logWordLearned),
+    // а не сколько выучено именно в текущей пачке — иначе он обнулялся бы при
+    // переходе к новой пачке в тот же день. Цель (знаменатель) — всегда
+    // актуальная дневная цель, а не размер уже сформированной пачки, чтобы
+    // смена цели сразу отражалась в счётчике.
+    const learnedToday = (state.dailyLearnedLog || {})[todayStr()] || 0;
+    document.getElementById('daily-progress-label').textContent = `${learnedToday} из ${dailyGoal}`;
   }
   document.querySelectorAll('#daily-goal button').forEach(b => {
     b.classList.toggle('active', parseInt(b.dataset.goal, 10) === dailyGoal);
@@ -788,6 +793,9 @@ function gradeCurrent(grade) {
   const isCorrect = grade === 'good' || grade === 'easy';
   const newSrs = studySession.type === 'review' ? SRS.gradeReview(word, isCorrect) : SRS.gradeNewWord(word, isCorrect);
   Storage.updateWord(word.id, { srs: newSrs });
+  if (studySession.type === 'new' && !word.srs.learned && newSrs.learned) {
+    Storage.logWordLearned();
+  }
   if (isCorrect) studySession.correct++;
   studySession.reviewed++;
   studySession.index++;

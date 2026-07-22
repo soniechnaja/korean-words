@@ -2,15 +2,15 @@
 // прогресс) тут ни при чём — они живут в localStorage, это отдельно.
 // Имя кэша нужно менять при любом заметном обновлении статических файлов,
 // чтобы старые версии не мешали новым (см. bump ?v= в index.html).
-const CACHE_NAME = 'kw-static-v13';
+const CACHE_NAME = 'kw-static-v14';
 const PRECACHE_URLS = [
   './',
   './index.html',
-  './style.css?v=13',
-  './hanja-data.js?v=13',
-  './storage.js?v=13',
-  './srs.js?v=13',
-  './app.js?v=13',
+  './style.css?v=14',
+  './hanja-data.js?v=14',
+  './storage.js?v=14',
+  './srs.js?v=14',
+  './app.js?v=14',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
