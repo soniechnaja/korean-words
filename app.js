@@ -709,14 +709,12 @@ function renderCurrentCard() {
           ${word.notes ? `<div class="card-notes">${esc(word.notes)}</div>` : ''}
         </div>
         <div class="grade-row">
-          <button class="grade-btn grade-again" data-grade="again">Не помню<small>снова завтра</small></button>
-          <button class="grade-btn grade-hard" data-grade="hard">Трудно<small>ещё раз скоро</small></button>
-          <button class="grade-btn grade-good" data-grade="good">Хорошо<small>через несколько дней</small></button>
-          <button class="grade-btn grade-easy" data-grade="easy">Легко<small>ещё не скоро</small></button>
+          <button class="grade-btn grade-wrong" data-correct="false">❌<small>${isReview ? 'откат на шаг назад' : 'ещё раз позже'}</small></button>
+          <button class="grade-btn grade-right" data-correct="true">✅<small>${isReview ? 'интервал растёт' : 'стадия выше'}</small></button>
         </div>
       `;
       document.querySelectorAll('.grade-btn').forEach(btn => {
-        btn.addEventListener('click', () => gradeCurrent(btn.dataset.grade));
+        btn.addEventListener('click', () => gradeCurrent(btn.dataset.correct === 'true'));
       });
     });
   } else if (mode === 'quiz') {
@@ -753,7 +751,7 @@ function renderCurrentCard() {
           ? `Верно! ✓${reverse ? speakBtnHtml(correctOption) : ''}`
           : `Неверно — правильно: ${esc(correctOption)}${reverse ? speakBtnHtml(correctOption) : ''}`;
         feedback.classList.add(isCorrect ? 'correct' : 'wrong');
-        setTimeout(() => gradeCurrent(isCorrect ? 'good' : 'again'), 900);
+        setTimeout(() => gradeCurrent(isCorrect), 900);
       });
     });
   } else {
@@ -792,15 +790,14 @@ function renderCurrentCard() {
           ? `Верно! ✓${speakBtnHtml(word.korean)}`
           : `Неверно — правильно: ${esc(word.korean)}${speakBtnHtml(word.korean)}`;
         feedback.classList.add(isCorrect ? 'correct' : 'wrong');
-        setTimeout(() => gradeCurrent(isCorrect ? 'good' : 'again'), 900);
+        setTimeout(() => gradeCurrent(isCorrect), 900);
       });
     });
   }
 }
 
-function gradeCurrent(grade) {
+function gradeCurrent(isCorrect) {
   const word = studySession.queue[studySession.index];
-  const isCorrect = grade === 'good' || grade === 'easy';
   const newSrs = studySession.type === 'review' ? SRS.gradeReview(word, isCorrect) : SRS.gradeNewWord(word, isCorrect);
   Storage.updateWord(word.id, { srs: newSrs });
   if (studySession.type === 'new' && !word.srs.learned && newSrs.learned) {
